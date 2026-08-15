@@ -43,6 +43,7 @@ export default function App() {
   const [importOpen, setImportOpen] = useState(false)
   const [backupOpen, setBackupOpen] = useState(false)
   const [projectOpen, setProjectOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [importBanner, setImportBanner] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [notifySupported] = useState(
@@ -143,17 +144,17 @@ export default function App() {
     <div className="min-h-screen">
       {/* 顶栏 */}
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-lg dark:border-slate-800 dark:bg-[#0b1220]/80">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm sm:h-9 sm:w-9">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 6h16M4 12h16M4 18h10" />
             </svg>
           </div>
-          <div>
-            <h1 className="text-base font-bold text-slate-800 dark:text-slate-100">
+          <div className="min-w-0 shrink-0">
+            <h1 className="whitespace-nowrap text-sm font-bold text-slate-800 sm:text-base dark:text-slate-100">
               开发工作台
             </h1>
-            <p className="text-[11px] text-slate-400">
+            <p className="hidden text-[11px] text-slate-400 sm:block">
               {format(new Date(), 'yyyy年M月d日 EEEE', { locale: zhCN })}
             </p>
           </div>
@@ -180,75 +181,166 @@ export default function App() {
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-2">
-            {/* 通知授权 */}
-            {notifySupported && !notifyGranted && (
-              <button
-                onClick={requestNotify}
-                className="hidden items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 md:inline-flex"
-                title="开启桌面通知，上线日自动提醒"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            {/* 桌面端：完整按钮组 */}
+            <div className="hidden items-center gap-2 sm:flex">
+              {notifySupported && !notifyGranted && (
+                <button
+                  onClick={requestNotify}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                  title="开启桌面通知，上线日自动提醒"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                  </svg>
+                  开启上线提醒
+                </button>
+              )}
+
+              <button className="btn-ghost" onClick={() => setExportOpen(true)}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
                 </svg>
-                开启上线提醒
+                <span className="hidden sm:inline">按月导出</span>
               </button>
-            )}
 
-            <button className="btn-ghost" onClick={() => setExportOpen(true)}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-              </svg>
-              <span className="hidden sm:inline">按月导出</span>
-            </button>
+              <button
+                className="btn-ghost"
+                onClick={() => setBackupOpen(true)}
+                title="导出完整备份或从备份恢复"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3" />
+                  <path d="M3 5v14a9 3 0 0 0 18 0V5" />
+                  <path d="M3 12a9 3 0 0 0 18 0" />
+                </svg>
+                <span className="hidden lg:inline">数据备份</span>
+              </button>
 
-            <button
-              className="btn-ghost"
-              onClick={() => setBackupOpen(true)}
-              title="导出完整备份或从备份恢复"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <ellipse cx="12" cy="5" rx="9" ry="3" />
-                <path d="M3 5v14a9 3 0 0 0 18 0V5" />
-                <path d="M3 12a9 3 0 0 0 18 0" />
-              </svg>
-              <span className="hidden lg:inline">数据备份</span>
-            </button>
+              <button
+                className="btn-ghost"
+                onClick={() => setProjectOpen(true)}
+                title="维护项目下拉数据（增删改）"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+                  <path d="M12 12v4M10 14h4" />
+                </svg>
+                <span className="hidden lg:inline">项目管理</span>
+              </button>
 
-            <button
-              className="btn-ghost"
-              onClick={() => setProjectOpen(true)}
-              title="维护项目下拉数据（增删改）"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-                <path d="M12 12v4M10 14h4" />
-              </svg>
-              <span className="hidden lg:inline">项目管理</span>
-            </button>
+              <button
+                className="btn-ghost"
+                onClick={() => setImportOpen(true)}
+                title="导入需求数据（支持旧版记录）"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                </svg>
+                <span className="hidden lg:inline">导入数据</span>
+              </button>
 
-            <button
-              className="btn-ghost"
-              onClick={() => setImportOpen(true)}
-              title="导入需求数据（支持旧版记录）"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-              </svg>
-              <span className="hidden lg:inline">导入数据</span>
-            </button>
+              <button className="btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }} title="快捷键 N">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span className="hidden sm:inline">新建需求</span>
+                <kbd className="hidden rounded bg-white/20 px-1 py-0.5 text-[10px] font-medium lg:inline">N</kbd>
+              </button>
+            </div>
 
-            <button className="btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }} title="快捷键 N">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              <span className="hidden sm:inline">新建需求</span>
-              <kbd className="hidden rounded bg-white/20 px-1 py-0.5 text-[10px] font-medium lg:inline">N</kbd>
-            </button>
+            {/* 移动端：仅保留新建 + 更多 + 主题 */}
+            <div className="flex items-center gap-1 sm:hidden">
+              <button
+                className="btn-primary h-8 w-8 items-center justify-center px-0"
+                onClick={() => { setEditing(null); setFormOpen(true) }}
+                title="新建需求"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setMobileMenuOpen((v) => !v)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                  aria-label="更多操作"
+                  title="更多操作"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="5" r="1.5" />
+                    <circle cx="12" cy="12" r="1.5" />
+                    <circle cx="12" cy="19" r="1.5" />
+                  </svg>
+                </button>
+
+                {mobileMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setMobileMenuOpen(false)}
+                    />
+                    <div className="absolute right-0 top-full z-50 mt-1.5 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                        onClick={() => { setMobileMenuOpen(false); setExportOpen(true) }}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                        </svg>
+                        按月导出
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                        onClick={() => { setMobileMenuOpen(false); setBackupOpen(true) }}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <ellipse cx="12" cy="5" rx="9" ry="3" />
+                          <path d="M3 5v14a9 3 0 0 0 18 0V5" />
+                          <path d="M3 12a9 3 0 0 0 18 0" />
+                        </svg>
+                        数据备份
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                        onClick={() => { setMobileMenuOpen(false); setProjectOpen(true) }}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+                          <path d="M12 12v4M10 14h4" />
+                        </svg>
+                        项目管理
+                      </button>
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                        onClick={() => { setMobileMenuOpen(false); setImportOpen(true) }}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                        </svg>
+                        导入数据
+                      </button>
+                      {notifySupported && !notifyGranted && (
+                        <button
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                          onClick={() => { setMobileMenuOpen(false); requestNotify() }}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                          </svg>
+                          开启上线提醒
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
 
             <button
               onClick={toggle}
-              className="rounded-lg border border-slate-200 p-2 text-slate-400 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-200 p-1.5 text-slate-400 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 sm:p-2"
               aria-label="切换主题"
               title={theme === 'dark' ? '切换到浅色' : '切换到深色'}
             >
@@ -267,7 +359,7 @@ export default function App() {
         </div>
 
         {/* 移动端 Tab */}
-        <div className="flex gap-1 border-t border-slate-200 px-4 py-2 dark:border-slate-800 sm:hidden">
+        <div className="flex gap-1 border-t border-slate-200 px-3 py-1.5 dark:border-slate-800 sm:hidden">
           {(
             [
               ['today', '今日概览'],
@@ -277,7 +369,7 @@ export default function App() {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                 tab === key
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-500 dark:text-slate-400'

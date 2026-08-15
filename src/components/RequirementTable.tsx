@@ -196,54 +196,59 @@ export function RequirementTable({
     <div className="space-y-4">
       {/* 筛选工具栏 */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
-            {(['all', ...STATUS_FLOW] as StatusFilter[]).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                  statusFilter === s
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
-              >
-                {s === 'all' ? '全部' : STATUS_META[s].label}
-                <span className="ml-1 opacity-70">{counts[s]}</span>
-              </button>
-            ))}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {/* 状态筛选：移动端横向滚动，桌面端自然换行 */}
+          <div className="flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:overflow-visible">
+            <div className="flex flex-nowrap rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800 sm:flex-wrap">
+              {(['all', ...STATUS_FLOW] as StatusFilter[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                    statusFilter === s
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {s === 'all' ? '全部' : STATUS_META[s].label}
+                  <span className="ml-1 opacity-70">{counts[s]}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
-          <Select
-            className="w-40"
-            placeholder="全部项目"
-            searchable
-            clearable
-            value={projectFilter === 'all' ? null : projectFilter}
-            onChange={(v) => setProjectFilter(v)}
-            onClear={() => setProjectFilter('all')}
-            options={projectOptions}
-          />
+          <div className="flex items-center gap-2">
+            <Select
+              className="w-40"
+              placeholder="全部项目"
+              searchable
+              clearable
+              value={projectFilter === 'all' ? null : projectFilter}
+              onChange={(v) => setProjectFilter(v)}
+              onClear={() => setProjectFilter('all')}
+              options={projectOptions}
+            />
 
-          {/* 移动端排序（小屏没有表头排序入口） */}
-          <Select
-            className="w-36 md:hidden"
-            value={`${sortField}:${sortDir}`}
-            onChange={(v) => {
-              const [f, d] = (v ?? 'createdAt:desc').split(':')
-              setSortField(f as SortField)
-              setSortDir(d as SortDir)
-            }}
-            options={[
-              { value: 'createdAt:desc', label: '最新创建' },
-              { value: 'createdAt:asc', label: '最早创建' },
-              { value: 'publishTime:desc', label: '最晚上线' },
-              { value: 'publishTime:asc', label: '最早上线' },
-              { value: 'status:desc', label: '按状态' },
-              { value: 'name:asc', label: '名称 A→Z' },
-              { value: 'name:desc', label: '名称 Z→A' },
-            ]}
-          />
+            {/* 移动端排序（小屏没有表头排序入口） */}
+            <Select
+              className="w-36 md:hidden"
+              value={`${sortField}:${sortDir}`}
+              onChange={(v) => {
+                const [f, d] = (v ?? 'createdAt:desc').split(':')
+                setSortField(f as SortField)
+                setSortDir(d as SortDir)
+              }}
+              options={[
+                { value: 'createdAt:desc', label: '最新创建' },
+                { value: 'createdAt:asc', label: '最早创建' },
+                { value: 'publishTime:desc', label: '最晚上线' },
+                { value: 'publishTime:asc', label: '最早上线' },
+                { value: 'status:desc', label: '按状态' },
+                { value: 'name:asc', label: '名称 A→Z' },
+                { value: 'name:desc', label: '名称 Z→A' },
+              ]}
+            />
+          </div>
         </div>
 
         <div className="relative">
@@ -256,7 +261,7 @@ export function RequirementTable({
           </svg>
           <input
             ref={searchInputRef}
-            className="input pl-9 pr-9 lg:w-64"
+            className="input w-full pl-9 pr-9 lg:w-64"
             placeholder="搜索名称 / 分支 / 模块 / 备注…"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
@@ -608,14 +613,14 @@ function RequirementCard({
       {/* 项目 / 分支 / 模块 */}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         {r.project && (
-          <span className="max-w-full truncate text-slate-500 dark:text-slate-400">
+          <span className="min-w-0 max-w-full truncate text-slate-500 dark:text-slate-400">
             {highlight(r.project, keyword)}
           </span>
         )}
         {r.branch && (
           <code
             onClick={() => onCopyBranch(r.branch)}
-            className={`max-w-[11rem] cursor-pointer truncate rounded px-1.5 py-0.5 transition ${
+            className={`min-w-0 max-w-full shrink-0 cursor-pointer truncate rounded px-1.5 py-0.5 transition ${
               copiedBranch === r.branch
                 ? 'bg-emerald-100 font-medium text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
                 : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
@@ -628,7 +633,7 @@ function RequirementCard({
         {r.publishModule && (
           <code
             onClick={() => onCopyModule(r.publishModule)}
-            className={`max-w-[9rem] cursor-pointer truncate rounded px-1.5 py-0.5 font-medium transition ${
+            className={`min-w-0 max-w-full shrink-0 cursor-pointer truncate rounded px-1.5 py-0.5 font-medium transition ${
               copiedModule === r.publishModule
                 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
                 : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400'
