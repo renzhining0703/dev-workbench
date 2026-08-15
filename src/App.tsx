@@ -170,7 +170,7 @@ export default function App() {
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
+                className={`whitespace-nowrap rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
                   tab === key
                     ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-400'
                     : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
@@ -181,13 +181,13 @@ export default function App() {
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             {/* 桌面端：完整按钮组 */}
             <div className="hidden items-center gap-2 sm:flex">
               {notifySupported && !notifyGranted && (
                 <button
                   onClick={requestNotify}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                  className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                   title="开启桌面通知，上线日自动提醒"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

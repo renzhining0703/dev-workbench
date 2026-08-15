@@ -286,7 +286,7 @@ function TaskCard({
       ) : (
         <ul className="space-y-1.5">
           {items.map((it) => (
-            <li key={it.id} className="text-sm text-slate-700 dark:text-slate-200">
+            <li key={it.id} className="break-words text-sm text-slate-700 dark:text-slate-200">
               <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle" />
               {it.name}
               {it.project && (
@@ -295,7 +295,7 @@ function TaskCard({
             </li>
           ))}
           {doneItems.map((it) => (
-            <li key={`done-${it.id}`} className="text-sm text-slate-400 line-through dark:text-slate-500">
+            <li key={`done-${it.id}`} className="break-words text-sm text-slate-400 line-through dark:text-slate-500">
               <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" />
               {it.name}
               {it.project && (

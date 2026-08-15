@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Requirement, RequirementStatus } from '../types'
 import { STATUS_FLOW, STATUS_META } from '../types'
 import { copyToClipboard, fmtDateShort, isDateToday } from '../lib/utils'
@@ -10,6 +11,11 @@ import { Select, statusSelectOptions } from './Select'
 import { RequirementDrawer } from './RequirementDrawer'
 
 type StatusFilter = 'all' | RequirementStatus
+
+/** 移动端高频 Tab：保持一屏内可达（含关键工作流节点"待上线"） */
+const HIGH_FREQ_STATUSES: RequirementStatus[] = ['pending', 'developing', 'testing', 'ready']
+/** 移动端低频状态：藏在"更多"下拉里；桌面端仍直接展示 */
+const LOW_FREQ_STATUSES: RequirementStatus[] = ['paused', 'published', 'archived']
 
 /** 排序方向 */
 type SortDir = 'asc' | 'desc'
@@ -80,6 +86,9 @@ export function RequirementTable({
   searchInputRef,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
+  const [morePos, setMorePos] = useState<{ top: number; right: number } | null>(null)
   const [projectFilter, setProjectFilter] = useState('all')
   const [keyword, setKeyword] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -97,6 +106,41 @@ export function RequirementTable({
     const t = window.setTimeout(() => setLoading(false), 120)
     return () => window.clearTimeout(t)
   }, [])
+
+  // "更多"下拉定位：Portal 到 document.body，避免父级 stacking context 与 overflow 干扰
+  useEffect(() => {
+    if (!moreOpen) {
+      setMorePos(null)
+      return
+    }
+    const DROPDOWN_W = 144 // w-36，与面板 className 保持一致
+    const PADDING = 8
+    const updatePos = () => {
+      const btn = moreButtonRef.current
+      if (!btn) return
+      const r = btn.getBoundingClientRect()
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      // 水平：默认对齐按钮右边缘；clamp 到视口内（避免左右溢出）
+      const desiredRight = vw - r.right
+      const right = Math.max(0, Math.min(desiredRight, vw - DROPDOWN_W - PADDING))
+      // 垂直：默认在按钮下方；下方空间不足时翻转到上方
+      const panelH = 120 // 3 行 × 36 + padding，预估
+      const spaceBelow = vh - r.bottom - PADDING
+      const top =
+        spaceBelow >= panelH
+          ? r.bottom + 4
+          : Math.max(PADDING, r.top - panelH - 4)
+      setMorePos({ top, right })
+    }
+    updatePos()
+    window.addEventListener('resize', updatePos)
+    window.addEventListener('scroll', updatePos, true)
+    return () => {
+      window.removeEventListener('resize', updatePos)
+      window.removeEventListener('scroll', updatePos, true)
+    }
+  }, [moreOpen])
 
   /** 点击复制到剪贴板，成功短暂显示「已复制」；新复制会先还原上一次的状态 */
   function copyWithFeedback(text: string, setCopied: (v: string | null) => void) {
@@ -197,10 +241,25 @@ export function RequirementTable({
       {/* 筛选工具栏 */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {/* 状态筛选：移动端横向滚动，桌面端自然换行 */}
-          <div className="flex overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:overflow-visible">
-            <div className="flex flex-nowrap rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800 sm:flex-wrap">
-              {(['all', ...STATUS_FLOW] as StatusFilter[]).map((s) => (
+          {/* 状态筛选：移动端 wrap 让所有按钮完整可见，桌面端不 wrap（单行展示全部 8 个） */}
+          <div className="flex sm:overflow-visible">
+            <div className="flex flex-wrap rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800 sm:flex-nowrap">
+              {/* 高频：桌面与移动都展示 */}
+              {/* 全部（单独处理，避免与 RequirementStatus 类型混用） */}
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                  statusFilter === 'all'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                全部
+                <span className="ml-1 opacity-70">{counts.all}</span>
+              </button>
+
+              {/* 高频：桌面与移动都展示 */}
+              {HIGH_FREQ_STATUSES.map((s) => (
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
@@ -210,16 +269,90 @@ export function RequirementTable({
                       : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
                   }`}
                 >
-                  {s === 'all' ? '全部' : STATUS_META[s].label}
+                  {STATUS_META[s].label}
                   <span className="ml-1 opacity-70">{counts[s]}</span>
                 </button>
               ))}
+
+              {/* 低频：仅桌面直接展示（移动端藏在更多下拉里） */}
+              {LOW_FREQ_STATUSES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`hidden shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition md:inline-flex ${
+                    statusFilter === s
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {STATUS_META[s].label}
+                  <span className="ml-1 opacity-70">{counts[s]}</span>
+                </button>
+              ))}
+
+              {/* 更多下拉：仅移动端 */}
+              <div className="relative md:hidden">
+                <button
+                  ref={moreButtonRef}
+                  onClick={() => setMoreOpen((v) => !v)}
+                  className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                    statusFilter !== 'all' &&
+                    LOW_FREQ_STATUSES.includes(statusFilter as RequirementStatus)
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : moreOpen
+                      ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                  title="更多状态"
+                >
+                  ⋯ 更多
+                </button>
+                {moreOpen &&
+                  morePos &&
+                  createPortal(
+                    <>
+                      {/* 外部点击关闭层：z-40，比 header 低、不抢弹窗 */}
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setMoreOpen(false)}
+                      />
+                      {/* 下拉面板：z-50（在 backdrop 之上），fixed 定位脱离父级堆叠上下文 */}
+                      <div
+                        className="fixed z-50 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                        style={{ top: morePos.top, right: morePos.right }}
+                      >
+                        {LOW_FREQ_STATUSES.map((s) => {
+                          const selected = statusFilter === s
+                          return (
+                            <button
+                              key={s}
+                              onClick={() => {
+                                setStatusFilter(s)
+                                setMoreOpen(false)
+                              }}
+                              className={`flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs transition ${
+                                selected
+                                  ? 'bg-indigo-50 font-medium text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400'
+                                  : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50'
+                              }`}
+                            >
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_META[s].dot}`} />
+                              {STATUS_META[s].label}
+                              <span className="ml-auto opacity-70">{counts[s]}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>,
+                    document.body,
+                  )}
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <Select
-              className="w-40"
+              className="flex-1 sm:w-40 sm:flex-none"
               placeholder="全部项目"
               searchable
               clearable
@@ -231,7 +364,7 @@ export function RequirementTable({
 
             {/* 移动端排序（小屏没有表头排序入口） */}
             <Select
-              className="w-36 md:hidden"
+              className="flex-1 sm:w-36 sm:flex-none md:hidden"
               value={`${sortField}:${sortDir}`}
               onChange={(v) => {
                 const [f, d] = (v ?? 'createdAt:desc').split(':')
@@ -620,7 +753,7 @@ function RequirementCard({
         {r.branch && (
           <code
             onClick={() => onCopyBranch(r.branch)}
-            className={`min-w-0 max-w-full shrink-0 cursor-pointer truncate rounded px-1.5 py-0.5 transition ${
+            className={`min-w-0 max-w-full cursor-pointer truncate rounded px-1.5 py-0.5 transition ${
               copiedBranch === r.branch
                 ? 'bg-emerald-100 font-medium text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
                 : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
@@ -633,7 +766,7 @@ function RequirementCard({
         {r.publishModule && (
           <code
             onClick={() => onCopyModule(r.publishModule)}
-            className={`min-w-0 max-w-full shrink-0 cursor-pointer truncate rounded px-1.5 py-0.5 font-medium transition ${
+            className={`min-w-0 max-w-full cursor-pointer truncate rounded px-1.5 py-0.5 font-medium transition ${
               copiedModule === r.publishModule
                 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
                 : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400'

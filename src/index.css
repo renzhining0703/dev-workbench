@@ -25,7 +25,7 @@
     @apply mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition
       disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {

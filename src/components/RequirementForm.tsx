@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { format } from 'date-fns'
 import type { Requirement } from '../types'
 import { useStore } from '../store/StoreContext'
 import { Modal } from './ui'
@@ -6,10 +7,14 @@ import { Select, statusSelectOptions } from './Select'
 
 export type RequirementDraft = Omit<Requirement, 'id' | 'createdAt' | 'updatedAt'>
 
+/** 新建需求时的分支前缀：`feature/YYYYMMDD/REQ-`，日期按当时动态计算 */
+const newRequirementBranchPrefix = (): string =>
+  `feature/${format(new Date(), 'yyyyMMdd')}/REQ-`
+
 const emptyDraft = (): RequirementDraft => ({
   name: '',
   project: '',
-  branch: '',
+  branch: newRequirementBranchPrefix(),
   publishModule: '',
   status: 'pending',
   devStartTime: null,
@@ -130,6 +135,9 @@ export function RequirementFormModal({
             value={draft.branch}
             onChange={(e) => set('branch', e.target.value)}
           />
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            新建时自动填入 <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">feature/&lt;今日&gt;/REQ-</code>，可继续修改
+          </p>
         </div>
 
         <div>
