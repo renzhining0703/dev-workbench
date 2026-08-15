@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>开发工作台 · 需求管理</title>
+    <script>
+      // 首屏前应用主题，避免闪烁
+      ;(function () {
+        var saved = localStorage.getItem('dev-workbench:theme')
+        var dark =
+          saved === 'dark' ||
+          (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
