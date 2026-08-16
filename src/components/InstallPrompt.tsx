@@ -10,12 +10,18 @@ import { useEffect, useState } from 'react'
  *   3. 微信内置浏览器（不支持 PWA 安装）
  *      - 顶部固定悬浮条，引导到 Safari / Chrome 打开
  *
+ * 4. 其他不发 beforeinstallprompt 事件的浏览器（小米/QQ/UC/华为等）
+ *    - 启动后探测定时器（1.5s）若没收到事件 → 假定不支持
+ *    - 底部弹引导条，教用户从浏览器菜单手动"添加到主屏幕"
+ *
  * 每个场景独立 dismiss，写入 localStorage 后不再弹
  */
 
 const DISMISS_KEY_CHROME = 'pwa:dismissed-chrome'
 const DISMISS_KEY_IOS = 'pwa:dismissed-ios'
 const DISMISS_KEY_WECHAT = 'pwa:dismissed-wechat'
+// 不发 beforeinstallprompt 事件的浏览器（小米/QQ/UC/华为等）的通用引导
+const DISMISS_KEY_GENERIC = 'pwa:dismissed-generic'
 
 // 设备/环境检测（SSR 安全）
 function detectEnv() {
@@ -45,6 +51,7 @@ export function InstallPrompt() {
   const [showChromeToast, setShowChromeToast] = useState(false)
   const [showIOSModal, setShowIOSModal] = useState(false)
   const [showWechatBar, setShowWechatBar] = useState(false)
+  const [showGenericBar, setShowGenericBar] = useState(false)
 
   useEffect(() => {
     const env = detectEnv()
@@ -64,25 +71,37 @@ export function InstallPrompt() {
     }
 
     // Chrome / Edge / Android：监听 beforeinstallprompt
+    // 但很多 Android 浏览器（小米/QQ/UC/华为）不发这个事件，
+    // 因此先用 1.5s 探测定时器判断：收到了走 PWA 提示，没收到走通用引导。
     if (env.isStandalone) return // 已经安装到主屏幕，不需要再提示
-    const dismissed = localStorage.getItem(DISMISS_KEY_CHROME)
-    if (dismissed) return
+
+    let gotEvent = false
+    const detectTimer = window.setTimeout(() => {
+      if (!gotEvent && !localStorage.getItem(DISMISS_KEY_GENERIC)) {
+        setShowGenericBar(true)
+      }
+    }, 1500)
 
     const onBeforeInstall = (e: Event) => {
+      gotEvent = true
+      window.clearTimeout(detectTimer)
       e.preventDefault()
       setDeferredPrompt(e as BeforeInstallPromptEvent)
       // 30 秒后弹浮窗（Chrome 启发式要求用户停留 ≥30s 才允许触发 prompt）
-      const t = window.setTimeout(() => {
+      const dismissed = localStorage.getItem(DISMISS_KEY_CHROME)
+      if (dismissed) return
+      window.setTimeout(() => {
         if (!localStorage.getItem(DISMISS_KEY_CHROME)) {
           setShowChromeToast(true)
         }
       }, 30_000)
-      // 如果组件卸载或事件源变了，清掉定时器
-      return () => window.clearTimeout(t)
     }
 
     window.addEventListener('beforeinstallprompt', onBeforeInstall)
-    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstall)
+    return () => {
+      window.clearTimeout(detectTimer)
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall)
+    }
   }, [])
 
   const dismissChrome = () => {
@@ -98,6 +117,11 @@ export function InstallPrompt() {
   const dismissWechat = () => {
     setShowWechatBar(false)
     localStorage.setItem(DISMISS_KEY_WECHAT, '1')
+  }
+
+  const dismissGeneric = () => {
+    setShowGenericBar(false)
+    localStorage.setItem(DISMISS_KEY_GENERIC, '1')
   }
 
   const installChrome = async () => {
@@ -226,6 +250,34 @@ export function InstallPrompt() {
             </button>
             <button type="button" onClick={installChrome} className="btn-primary text-sm">
               安装
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 通用引导条（小米/QQ/UC/华为等不发 beforeinstallprompt 的浏览器） */}
+      {showGenericBar && (
+        <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
+          <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="7" y="2" width="10" height="20" rx="2" />
+                <path d="M11 18h2" />
+              </svg>
+            </div>
+            <div className="flex-1 text-sm text-slate-700 dark:text-slate-200">
+              <p className="font-medium">添加到桌面</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                浏览器菜单（右上角 ···）→ 添加到主屏幕
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dismissGeneric}
+              className="rounded px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              aria-label="关闭"
+            >
+              知道了
             </button>
           </div>
         </div>
