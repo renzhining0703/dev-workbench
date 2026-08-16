@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react'
 
 /**
- * 安装引导组件（三场景合一）：
- *   1. Chrome / Edge / Android（监听 beforeinstallprompt）
- *      - 30 秒后底部弹一个底栏浮窗（不是 Modal，避免侵入）
- *      - 用户点"安装到桌面"调用浏览器原生安装提示
- *   2. iOS Safari（无 beforeinstallprompt，手动引导）
- *      - 首次进入显示居中 Modal，步骤化教用户在分享菜单里"添加到主屏幕"
- *   3. 微信内置浏览器（不支持 PWA 安装）
- *      - 顶部固定悬浮条，引导到 Safari / Chrome 打开
- *
- * 4. 其他不发 beforeinstallprompt 事件的浏览器（小米/QQ/UC/华为等）
- *    - 启动后探测定时器（1.5s）若没收到事件 → 假定不支持
- *    - 底部弹引导条，教用户从浏览器菜单手动"添加到主屏幕"
+ * 安装引导组件（按 UA 分流到四条路径）：
+ *   1. 微信内置浏览器 → 顶部固定悬浮条，引导到 Safari/Chrome 打开
+ *   2. iOS Safari → 居中 Modal，步骤化教用户在分享菜单里"添加到主屏幕"
+ *   3. 中国定制浏览器（小米/QQ/UC/华为/Vivo/Oppo/夸克等）
+ *      - 不发 beforeinstallprompt，1.5s 后底部弹通用引导条
+ *      - 教用户从浏览器菜单手动"添加到主屏幕"
+ *   4. 标准 Chromium 浏览器（Chrome / Edge / Samsung / Brave 等）
+ *      - Chrome 默认要用户停留 ≥30s 才触发 beforeinstallprompt
+ *      - 我们等 30s：收到了 → Chrome PWA 浮窗（带"安装"按钮）；没收到（说明 PWA
+ *        配置有问题或浏览器禁用）→ 通用引导条兜底
  *
  * 每个场景独立 dismiss，写入 localStorage 后不再弹
  */
@@ -38,6 +36,20 @@ function detectEnv() {
       // Android/Chrome standalone
       window.matchMedia('(display-mode: standalone)').matches,
   }
+}
+
+/**
+ * 是否为中国定制 Android 浏览器（不发 beforeinstallprompt）
+ * 覆盖：小米 MIUI Browser / QQ MQQBrowser / UC / 华为 / Vivo / Oppo ColorOS /
+ *       夸克 / 一加 HeyTap / 魅族 / 360 / 搜狗
+ * 这些浏览器虽然基于 Chromium fork，但都没有实现 PWA install 协议
+ */
+function isCNModifiedBrowser() {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  return /MiuiBrowser|XiaoMi\/MiuiBrowser|MQQBrowser|UCBrowser|HuaweiBrowser|Quark|VivoBrowser|OppoBrowser|HeyTapBrowser|MEIZU|360SE|SogouMobileBrowser/i.test(
+    ua,
+  )
 }
 
 // BeforeInstallPromptEvent 在 TS DOM lib 里没有定义，这里手动声明
@@ -70,36 +82,47 @@ export function InstallPrompt() {
       return
     }
 
-    // Chrome / Edge / Android：监听 beforeinstallprompt
-    // 但很多 Android 浏览器（小米/QQ/UC/华为）不发这个事件，
-    // 因此先用 1.5s 探测定时器判断：收到了走 PWA 提示，没收到走通用引导。
-    if (env.isStandalone) return // 已经安装到主屏幕，不需要再提示
-
-    let gotEvent = false
-    const detectTimer = window.setTimeout(() => {
-      if (!gotEvent && !localStorage.getItem(DISMISS_KEY_GENERIC)) {
-        setShowGenericBar(true)
+    // 中国定制 Android 浏览器（小米/QQ/UC/华为/Vivo/Oppo/夸克等）
+    // 这些浏览器不发 beforeinstallprompt，1.5s 后直接弹通用引导条
+    if (isCNModifiedBrowser()) {
+      if (!localStorage.getItem(DISMISS_KEY_GENERIC)) {
+        const t = window.setTimeout(() => {
+          if (!localStorage.getItem(DISMISS_KEY_GENERIC)) {
+            setShowGenericBar(true)
+          }
+        }, 1500)
+        return () => window.clearTimeout(t)
       }
-    }, 1500)
-
-    const onBeforeInstall = (e: Event) => {
-      gotEvent = true
-      window.clearTimeout(detectTimer)
-      e.preventDefault()
-      setDeferredPrompt(e as BeforeInstallPromptEvent)
-      // 30 秒后弹浮窗（Chrome 启发式要求用户停留 ≥30s 才允许触发 prompt）
-      const dismissed = localStorage.getItem(DISMISS_KEY_CHROME)
-      if (dismissed) return
-      window.setTimeout(() => {
-        if (!localStorage.getItem(DISMISS_KEY_CHROME)) {
-          setShowChromeToast(true)
-        }
-      }, 30_000)
+      return
     }
 
+    // 标准 Chromium 浏览器（Chrome / Edge / Samsung / Brave 等）
+    // Chrome 默认要用户停留 ≥30s 才触发 beforeinstallprompt，等 30s 再决定：
+    //   - 收到了 → PWA 可装 → Chrome 浮窗（带"安装"按钮）
+    //   - 没收到 → PWA 不可装 → 通用引导条兜底（教用户去菜单手动加）
+    const chromeDismissed = !!localStorage.getItem(DISMISS_KEY_CHROME)
+    const genericDismissed = !!localStorage.getItem(DISMISS_KEY_GENERIC)
+    if (chromeDismissed && genericDismissed) return
+
+    let gotEvent = false
+    const onBeforeInstall = (e: Event) => {
+      gotEvent = true
+      e.preventDefault()
+      setDeferredPrompt(e as BeforeInstallPromptEvent)
+    }
     window.addEventListener('beforeinstallprompt', onBeforeInstall)
+
+    const decideTimer = window.setTimeout(() => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall)
+      if (gotEvent) {
+        if (!chromeDismissed) setShowChromeToast(true)
+      } else {
+        if (!genericDismissed) setShowGenericBar(true)
+      }
+    }, 30_000)
+
     return () => {
-      window.clearTimeout(detectTimer)
+      window.clearTimeout(decideTimer)
       window.removeEventListener('beforeinstallprompt', onBeforeInstall)
     }
   }, [])
