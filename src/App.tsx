@@ -10,6 +10,7 @@ import { PublishReminder, TodoPanel } from './components/TodoPanel'
 import { ExportModal } from './components/ExportModal'
 import { ImportModal } from './components/ImportModal'
 import { BackupModal } from './components/BackupModal'
+import { InstallPrompt } from './components/InstallPrompt'
 import { parseImportData } from './lib/migrate'
 import { hasProjectInitFlag, markProjectInit } from './lib/storage'
 import { seedProjects } from './data/seedProjects'
@@ -58,7 +59,8 @@ export default function App() {
   useEffect(() => {
     if (store.requirements.length > 0) return
     if (localStorage.getItem(IMPORT_FLAG_KEY)) return
-    fetch('/import-data.json')
+    // 用 import.meta.env.BASE_URL 拼接，dev 自动 /，build 自动 /dev-workbench/
+    fetch(import.meta.env.BASE_URL + 'import-data.json')
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('no file'))))
       .then((data) => {
         const items = parseImportData(data)
@@ -142,6 +144,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
+      {/* PWA 安装引导：Chrome 浮窗 / iOS Modal / 微信顶部条 */}
+      <InstallPrompt />
+
       {/* 顶栏 */}
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-lg dark:border-slate-800 dark:bg-[#0b1220]/80">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">

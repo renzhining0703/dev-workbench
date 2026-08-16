@@ -6,6 +6,7 @@
 
 ```bash
 npm install
+npm run gen:icons    # 生成 PWA 图标（首次或改了 favicon.svg 时跑）
 npm run dev          # 本地开发，base = /
 ```
 
@@ -59,3 +60,37 @@ ssh dev-workbench 'mv /var/www/.bak/dev-workbench-20260815-120000 /var/www/dev-w
 
 - SSH 密钥免密登录 `dev-workbench` 别名已配好（`~/.ssh/config`）
 - 服务器存在 `/var/www/dev-workbench` 目录且 nginx 配置了对应 location
+
+## PWA 支持（桌面图标 + 全屏体验）
+
+部署到 `https://<your-domain>/dev-workbench/` 后，移动端浏览器会自动提示「安装到桌面」，装好后：
+
+- 主屏幕图标 + 启动全屏（隐藏浏览器 UI）
+- 离线可用（Service Worker 缓存资源）
+- 主题色统一（地址栏 / 启动画面 / 状态栏都用 `#6366f1`）
+
+### 安装方式
+
+| 设备/浏览器 | 安装方式 |
+|---|---|
+| **Chrome / Edge（Android）** | 地址栏右侧出现「安装」图标；或在页面停留 30 秒后底部浮窗提示 |
+| **iOS Safari** | 分享按钮 ⤴ → 添加到主屏幕（首次访问会弹引导 Modal） |
+| **微信内置浏览器** | 顶部条提示：右上角 ··· → 在浏览器中打开 |
+
+### 重新生成 PWA 图标
+
+如果改了 `public/favicon.svg` 想要新的 PWA 图标：
+
+```bash
+npm run gen:icons
+```
+
+会重新生成 `public/pwa-192x192.png`、`pwa-512x512.png`、`pwa-maskable-512.png`、`apple-touch-icon.png`。
+
+### Web Push
+
+当前**未启用** Web Push（需要后端）。已装的 PWA 仍能：
+- 通过浏览器内的桌面通知（用户在前台时）
+- 应用启动后读取 localStorage 检查今日上线需求
+
+要做真正的后台推送（浏览器被杀也能收到），需要新增一个后端服务接收 PushSubscription 并定时发推送，属于单独 PR 范围。

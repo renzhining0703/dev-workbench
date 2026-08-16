@@ -3,8 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- PWA：viewport-fit=cover 让内容延伸到 iOS 刘海/灵动岛安全区 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- 主题色：跟 manifest.theme_color 保持一致；深色模式单独定义 -->
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="theme-color" content="#312e81" media="(prefers-color-scheme: dark)" />
+
+    <!-- iOS PWA 核心：添加到主屏幕后全屏启动、自定义图标/名称 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="工作台" />
+
+    <!-- 旧 Android Chrome 兼容 -->
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- iOS 不自动识别电话/邮箱为链接 -->
+    <meta name="format-detection" content="telephone=no" />
+
     <title>开发工作台 · 需求管理</title>
+
+    <!-- manifest link 由 vite-plugin-pwa 自动注入 -->
+
     <script>
       // 首屏前应用主题，避免闪烁
       ;(function () {
