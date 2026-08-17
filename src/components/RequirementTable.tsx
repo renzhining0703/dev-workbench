@@ -40,6 +40,8 @@ const VALID_SORT_DIRS: SortDir[] = ['asc', 'desc']
 interface Props {
   requirements: Requirement[]
   onEdit: (r: Requirement) => void
+  /** 克隆：以源需求为模板打开新建表单 */
+  onClone?: (r: Requirement) => void
   onDelete: (id: string) => void
   onBatchDelete?: (ids: string[]) => void
   onStatusChange: (id: string, status: RequirementStatus) => void
@@ -96,6 +98,7 @@ function TimeCell({ r, wrap = false }: { r: Requirement; wrap?: boolean }) {
 export function RequirementTable({
   requirements,
   onEdit,
+  onClone,
   onDelete,
   onBatchDelete,
   onStatusChange,
@@ -127,7 +130,6 @@ export function RequirementTable({
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchDeleteIds, setBatchDeleteIds] = useState<string[] | null>(null)
-  const [batchStatusOpen, setBatchStatusOpen] = useState(false)
   const copyTimer = useRef<number | null>(null)
   const revertRef = useRef<(() => void) | null>(null)
 
@@ -781,6 +783,18 @@ export function RequirementTable({
                               <circle cx="12" cy="12" r="3" />
                             </svg>
                           </button>
+                          {onClone && (
+                            <button
+                              onClick={() => onClone(r)}
+                              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+                              title="克隆（以当前需求为模板新建）"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            </button>
+                          )}
                           <button
                             onClick={() => setDeleteId(r.id)}
                             className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
@@ -815,6 +829,7 @@ export function RequirementTable({
                   onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
                   onOpen={() => setDrawerId(r.id)}
                   onEdit={() => onEdit(r)}
+                  onClone={onClone ? () => onClone(r) : undefined}
                   onDelete={() => setDeleteId(r.id)}
                   onFilterStatus={(s) => setStatusFilter(s)}
                 />
@@ -896,6 +911,7 @@ function RequirementCard({
   onCopyModule,
   onOpen,
   onEdit,
+  onClone,
   onDelete,
   onFilterStatus,
 }: {
@@ -910,6 +926,7 @@ function RequirementCard({
   onCopyModule: (m: string) => void
   onOpen: () => void
   onEdit: () => void
+  onClone?: () => void
   onDelete: () => void
   onFilterStatus: (s: RequirementStatus) => void
 }) {
@@ -946,6 +963,18 @@ function RequirementCard({
               <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
             </svg>
           </button>
+          {onClone && (
+            <button
+              onClick={onClone}
+              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+              title="克隆"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={onDelete}
             className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"

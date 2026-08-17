@@ -5,6 +5,7 @@ import type { Requirement, RequirementStatus } from './types'
 import { useStore } from './store/StoreContext'
 import { RequirementFormModal, type RequirementDraft } from './components/RequirementForm'
 import { RequirementTable } from './components/RequirementTable'
+import { RequirementKanban } from './components/RequirementKanban'
 import { ProjectManagerModal } from './components/ProjectManagerModal'
 import { PublishReminder, TodoPanel } from './components/TodoPanel'
 import { ExportModal } from './components/ExportModal'
@@ -20,6 +21,7 @@ import { hasProjectInitFlag, markProjectInit } from './lib/storage'
 import { seedProjects } from './data/seedProjects'
 
 type Tab = 'today' | 'list' | 'stats'
+type ListView = 'table' | 'kanban'
 
 /** 首次启动自动导入历史数据的一次性标记（避免清空数据后又自动填回） */
 const IMPORT_FLAG_KEY = 'dev-workbench:legacy-imported'
@@ -42,8 +44,10 @@ export default function App() {
   const store = useStore()
   const { theme, toggle } = useTheme()
   const [tab, setTab] = useState<Tab>('today')
+  const [listView, setListView] = useState<ListView>('table')
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Requirement | null>(null)
+  const [cloneSource, setCloneSource] = useState<Requirement | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [backupOpen, setBackupOpen] = useState(false)
@@ -133,7 +137,15 @@ export default function App() {
     }
     setFormOpen(false)
     setEditing(null)
+    setCloneSource(null)
   }
+
+  /** 克隆：以源需求为模板打开新建表单，关闭时清掉 */
+  const handleClone = useCallback((r: Requirement) => {
+    setEditing(null)
+    setCloneSource(r)
+    setFormOpen(true)
+  }, [])
 
   const handleStatusChange = useCallback(
     (id: string, status: RequirementStatus) => {
@@ -511,14 +523,43 @@ export default function App() {
             />
           </div>
         ) : tab === 'list' ? (
-          <RequirementTable
-            requirements={store.requirements}
-            onEdit={(r) => { setEditing(r); setFormOpen(true) }}
-            onDelete={handleDelete}
-            onBatchDelete={handleBatchDelete}
-            onStatusChange={handleStatusChange}
-            searchInputRef={searchInputRef}
-          />
+          <>
+            {/* 视图切换：表格 / 看板 */}
+            <div className="mb-3 inline-flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
+              {(['table', 'kanban'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setListView(v)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    listView === v
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {v === 'table' ? '📋 表格' : '🗂 看板'}
+                </button>
+              ))}
+            </div>
+
+            {listView === 'table' ? (
+              <RequirementTable
+                requirements={store.requirements}
+                onEdit={(r) => { setEditing(r); setFormOpen(true) }}
+                onClone={handleClone}
+                onDelete={handleDelete}
+                onBatchDelete={handleBatchDelete}
+                onStatusChange={handleStatusChange}
+                searchInputRef={searchInputRef}
+              />
+            ) : (
+              <RequirementKanban
+                requirements={store.requirements}
+                onEdit={(r) => { setEditing(r); setFormOpen(true) }}
+                onStatusChange={handleStatusChange}
+                searchInputRef={searchInputRef}
+              />
+            )}
+          </>
         ) : (
           <StatsView requirements={store.requirements} />
         )}
@@ -528,7 +569,8 @@ export default function App() {
       <RequirementFormModal
         open={formOpen}
         initial={editing}
-        onClose={() => { setFormOpen(false); setEditing(null) }}
+        prefill={cloneSource}
+        onClose={() => { setFormOpen(false); setEditing(null); setCloneSource(null) }}
         onSave={handleSave}
       />
       <ExportModal

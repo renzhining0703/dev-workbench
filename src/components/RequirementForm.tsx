@@ -34,16 +34,19 @@ function toDateInput(iso: string | null): string {
 export function RequirementFormModal({
   open,
   initial,
+  prefill,
   onClose,
   onSave,
 }: {
   open: boolean
   initial: Requirement | null
+  /** 克隆模式：以某个需求为模板新建；时间字段清空、状态重置 pending */
+  prefill?: Requirement | null
   onClose: () => void
   onSave: (draft: RequirementDraft) => void
 }) {
   const [draft, setDraft] = useState<RequirementDraft>(emptyDraft)
-  // 创建时间只读展示：编辑时取原值，新建时为今天
+  // 创建时间只读展示：编辑时取原值，新建/克隆时为今天
   const [createdAtStr, setCreatedAtStr] = useState(() => new Date().toISOString())
 
   const { projects } = useStore()
@@ -57,6 +60,7 @@ export function RequirementFormModal({
   useEffect(() => {
     if (!open) return
     if (initial) {
+      // 编辑模式：所有字段原样回填
       setCreatedAtStr(initial.createdAt)
       setDraft({
         name: initial.name,
@@ -70,11 +74,27 @@ export function RequirementFormModal({
         publishTime: initial.publishTime,
         remark: initial.remark,
       })
+    } else if (prefill) {
+      // 克隆模式：复制模板字段，时间清空、状态重置 pending、分支用今日新前缀
+      setCreatedAtStr(new Date().toISOString())
+      setDraft({
+        name: prefill.name ? `${prefill.name} (副本)` : '',
+        project: prefill.project ?? '',
+        branch: newRequirementBranchPrefix(),
+        publishModule: prefill.publishModule ?? '',
+        status: 'pending',
+        devStartTime: null,
+        devEndTime: null,
+        testTime: null,
+        publishTime: null,
+        remark: prefill.remark ?? '',
+      })
     } else {
+      // 新建模式
       setCreatedAtStr(new Date().toISOString())
       setDraft(emptyDraft())
     }
-  }, [open, initial])
+  }, [open, initial, prefill])
 
   const set = <K extends keyof RequirementDraft>(key: K, value: RequirementDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
@@ -97,7 +117,7 @@ export function RequirementFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={initial ? '编辑需求' : '新建需求'}
+      title={initial ? '编辑需求' : prefill ? '克隆需求' : '新建需求'}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
