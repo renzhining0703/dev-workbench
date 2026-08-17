@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Requirement, RequirementStatus } from '../types'
 import { STATUS_FLOW, STATUS_META } from '../types'
-import { copyToClipboard, fmtDateShort, isDateToday } from '../lib/utils'
+import { copyToClipboard, exportCsv, fmtDate, fmtDateShort, isDateToday } from '../lib/utils'
 import { highlight } from '../lib/highlight'
 import { extractProjectNames } from '../lib/projects'
 import { useStore } from '../store/StoreContext'
@@ -23,10 +23,25 @@ type SortDir = 'asc' | 'desc'
 /** 可排序字段 */
 type SortField = 'createdAt' | 'publishTime' | 'status' | 'name'
 
+/** URL 参数读取工具 */
+function readUrlParam(key: string, fallback: string): string {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    return params.get(key) || fallback
+  } catch {
+    return fallback
+  }
+}
+
+const VALID_STATUSES: StatusFilter[] = ['all', 'pending', 'developing', 'testing', 'ready', 'paused', 'published', 'archived']
+const VALID_SORT_FIELDS: SortField[] = ['createdAt', 'publishTime', 'status', 'name']
+const VALID_SORT_DIRS: SortDir[] = ['asc', 'desc']
+
 interface Props {
   requirements: Requirement[]
   onEdit: (r: Requirement) => void
   onDelete: (id: string) => void
+  onBatchDelete?: (ids: string[]) => void
   onStatusChange: (id: string, status: RequirementStatus) => void
   /** 搜索框 ref，供全局快捷键 / 聚焦 */
   searchInputRef?: React.Ref<HTMLInputElement>
@@ -82,30 +97,76 @@ export function RequirementTable({
   requirements,
   onEdit,
   onDelete,
+  onBatchDelete,
   onStatusChange,
   searchInputRef,
 }: Props) {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const v = readUrlParam('status', 'all')
+    return VALID_STATUSES.includes(v as StatusFilter) ? (v as StatusFilter) : 'all'
+  })
   const [moreOpen, setMoreOpen] = useState(false)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
   const [morePos, setMorePos] = useState<{ top: number; right: number } | null>(null)
-  const [projectFilter, setProjectFilter] = useState('all')
-  const [keyword, setKeyword] = useState('')
+  const [projectFilter, setProjectFilter] = useState(() => readUrlParam('project', 'all'))
+  const [keyword, setKeyword] = useState(() => readUrlParam('q', ''))
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [copiedBranch, setCopiedBranch] = useState<string | null>(null)
   const [copiedModule, setCopiedModule] = useState<string | null>(null)
-  const [sortField, setSortField] = useState<SortField>('createdAt')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [sortField, setSortField] = useState<SortField>(() => {
+    const v = readUrlParam('sort', 'createdAt')
+    return VALID_SORT_FIELDS.includes(v as SortField) ? (v as SortField) : 'createdAt'
+  })
+  const [sortDir, setSortDir] = useState<SortDir>(() => {
+    const v = readUrlParam('dir', 'desc')
+    return VALID_SORT_DIRS.includes(v as SortDir) ? (v as SortDir) : 'desc'
+  })
   const [drawerId, setDrawerId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  // 批量选择：默认关闭，点「批量」开关后才展示复选框
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchDeleteIds, setBatchDeleteIds] = useState<string[] | null>(null)
+  const [batchStatusOpen, setBatchStatusOpen] = useState(false)
   const copyTimer = useRef<number | null>(null)
   const revertRef = useRef<(() => void) | null>(null)
+
+  /** 退出批量模式并清空选择 */
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }, [])
+
+  // Esc 退出批量模式（有弹窗打开时不抢按键）
+  useEffect(() => {
+    if (!selectMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (document.querySelector('.fixed.inset-0.z-50')) return
+      exitSelectMode()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectMode, exitSelectMode])
 
   // 首屏骨架屏：短暂显示骨架行，提升加载感知
   useEffect(() => {
     const t = window.setTimeout(() => setLoading(false), 120)
     return () => window.clearTimeout(t)
   }, [])
+
+  // 筛选/搜索/排序状态 → URL 同步（刷新不丢，可分享链接）
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (statusFilter !== 'all') params.set('status', statusFilter)
+    if (projectFilter !== 'all') params.set('project', projectFilter)
+    if (keyword.trim()) params.set('q', keyword.trim())
+    if (sortField !== 'createdAt') params.set('sort', sortField)
+    if (sortDir !== 'desc') params.set('dir', sortDir)
+    const qs = params.toString()
+    const newUrl = window.location.pathname + (qs ? '?' + qs : '') + window.location.hash
+    window.history.replaceState(null, '', newUrl)
+  }, [statusFilter, projectFilter, keyword, sortField, sortDir])
 
   // "更多"下拉定位：Portal 到 document.body，避免父级 stacking context 与 overflow 干扰
   useEffect(() => {
@@ -170,7 +231,12 @@ export function RequirementTable({
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
     const result = requirements.filter((r) => {
-      if (statusFilter !== 'all' && r.status !== statusFilter) return false
+      if (statusFilter !== 'all') {
+        if (r.status !== statusFilter) return false
+      } else if (r.status === 'archived') {
+        // 默认「全部」视图隐藏已归档：通过「更多 → 已归档」专门查看
+        return false
+      }
       // 历史数据可能是多项目（逗号/分号分隔），按拆分匹配
       if (projectFilter !== 'all' && !extractProjectNames(r.project).includes(projectFilter)) {
         return false
@@ -225,6 +291,48 @@ export function RequirementTable({
   }
 
   const hasActiveFilter = statusFilter !== 'all' || projectFilter !== 'all' || keyword.trim() !== ''
+
+  // 批量选择操作
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id))
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        filtered.forEach((r) => next.delete(r.id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        filtered.forEach((r) => next.add(r.id))
+        return next
+      })
+    }
+  }
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const handleBatchExport = () => {
+    const items = filtered.filter((r) => selectedIds.has(r.id))
+    if (items.length === 0) return
+    exportCsv(
+      `需求清单_${new Date().toISOString().slice(0, 10)}.csv`,
+      ['需求名称', '项目', '分支', '发布模块', '状态', '创建时间', '开发开始', '开发结束', '提测时间', '上线时间', '备注'],
+      items.map((r) => [
+        r.name, r.project, r.branch, r.publishModule,
+        STATUS_META[r.status].label,
+        fmtDate(r.createdAt), fmtDate(r.devStartTime), fmtDate(r.devEndTime),
+        fmtDate(r.testTime), fmtDate(r.publishTime), r.remark,
+      ]),
+    )
+  }
 
   const counts = useMemo(() => {
     const map: Record<string, number> = { all: requirements.length }
@@ -381,6 +489,22 @@ export function RequirementTable({
                 { value: 'name:desc', label: '名称 Z→A' },
               ]}
             />
+
+            {/* 批量操作开关：开启后行首才出现复选框 */}
+            <button
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition ${
+                selectMode
+                  ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400'
+                  : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
+              }`}
+              title={selectMode ? '退出批量选择（Esc）' : '批量选择'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m3 7 2 2 4-4M3 17l2 2 4-4M13 6h8M13 12h8M13 18h8" />
+              </svg>
+              {selectMode ? '退出批量' : '批量'}
+            </button>
           </div>
         </div>
 
@@ -407,14 +531,65 @@ export function RequirementTable({
         </div>
       </div>
 
+      {/* 批量操作工具栏：仅批量模式下展示 */}
+      {selectMode && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 dark:border-indigo-500/30 dark:bg-indigo-500/10">
+          <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+            {selectedIds.size > 0 ? `已选 ${selectedIds.size} 项` : '批量模式：勾选行首复选框'}
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Select
+              size="sm"
+              className="w-32"
+              placeholder="批量改状态"
+              value={null}
+              onChange={(v) => {
+                if (v) {
+                  selectedIds.forEach((id) => onStatusChange(id, v as RequirementStatus))
+                  clearSelection()
+                }
+              }}
+              options={statusSelectOptions}
+            />
+            <button
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              onClick={handleBatchExport}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+              </svg>
+              导出选中
+            </button>
+            {onBatchDelete && (
+              <button
+                className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-rose-700"
+                onClick={() => setBatchDeleteIds([...selectedIds])}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z" />
+                </svg>
+                删除选中
+              </button>
+            )}
+            <button
+              className="rounded-lg px-2 py-1.5 text-xs text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              onClick={exitSelectMode}
+              title="快捷键 Esc"
+            >
+              退出批量
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 列表区：桌面表格 / 移动端卡片 */}
       <div className="card overflow-hidden">
         {loading ? (
           <>
             {/* 桌面骨架行 */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[1100px] text-sm">
-                <SkeletonRows rows={5} cols={6} />
+              <table className={`w-full text-sm ${selectMode ? 'min-w-[1140px]' : 'min-w-[1100px]'}`}>
+                <SkeletonRows rows={5} cols={selectMode ? 7 : 6} />
               </table>
             </div>
             {/* 移动端骨架卡片 */}
@@ -468,9 +643,19 @@ export function RequirementTable({
           <>
             {/* 桌面表格 */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[1100px] text-sm">
+              <table className={`w-full text-sm ${selectMode ? 'min-w-[1140px]' : 'min-w-[1100px]'}`}>
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
+                    {selectMode && (
+                      <th className="w-10 px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700"
+                        />
+                      </th>
+                    )}
                     <th
                       className="cursor-pointer select-none px-4 py-3 hover:text-slate-700 dark:hover:text-slate-200"
                       onClick={() => toggleSort('name')}
@@ -502,8 +687,18 @@ export function RequirementTable({
                   return (
                     <tr
                       key={r.id}
-                      className="border-b border-slate-100 transition last:border-0 hover:bg-slate-50/70 dark:border-slate-800/60 dark:hover:bg-slate-800/40"
+                      className={`border-b border-slate-100 transition last:border-0 hover:bg-slate-50/70 dark:border-slate-800/60 dark:hover:bg-slate-800/40 ${selectedIds.has(r.id) ? 'bg-indigo-50/50 dark:bg-indigo-500/5' : ''}`}
                     >
+                      {selectMode && (
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(r.id)}
+                            onChange={() => toggleSelect(r.id)}
+                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <div
                           className="cursor-pointer font-medium text-slate-800 transition hover:text-indigo-600 dark:text-slate-100 dark:hover:text-indigo-400"
@@ -613,6 +808,9 @@ export function RequirementTable({
                   keyword={keyword}
                   copiedBranch={copiedBranch}
                   copiedModule={copiedModule}
+                  selectMode={selectMode}
+                  selected={selectedIds.has(r.id)}
+                  onToggleSelect={() => toggleSelect(r.id)}
                   onCopyBranch={(b) => copyWithFeedback(b, setCopiedBranch)}
                   onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
                   onOpen={() => setDrawerId(r.id)}
@@ -633,11 +831,26 @@ export function RequirementTable({
       <ConfirmDialog
         open={!!deleteId}
         title="删除需求"
-        message={`确定删除「${deleting?.name ?? ''}」吗？该操作不可恢复。`}
+        message={`确定删除「${deleting?.name ?? ''}」吗？删除后 5 秒内可撤销。`}
         onCancel={() => setDeleteId(null)}
         onConfirm={() => {
           if (deleteId) onDelete(deleteId)
           setDeleteId(null)
+        }}
+      />
+
+      {/* 批量删除确认 */}
+      <ConfirmDialog
+        open={!!batchDeleteIds}
+        title="批量删除"
+        message={`确定删除选中的 ${batchDeleteIds?.length ?? 0} 条需求吗？删除后 5 秒内可撤销。`}
+        onCancel={() => setBatchDeleteIds(null)}
+        onConfirm={() => {
+          if (batchDeleteIds && onBatchDelete) {
+            onBatchDelete(batchDeleteIds)
+          }
+          setBatchDeleteIds(null)
+          clearSelection()
         }}
       />
 
@@ -676,6 +889,9 @@ function RequirementCard({
   keyword,
   copiedBranch,
   copiedModule,
+  selectMode,
+  selected,
+  onToggleSelect,
   onCopyBranch,
   onCopyModule,
   onOpen,
@@ -687,6 +903,9 @@ function RequirementCard({
   keyword: string
   copiedBranch: string | null
   copiedModule: string | null
+  selectMode: boolean
+  selected: boolean
+  onToggleSelect: () => void
   onCopyBranch: (b: string) => void
   onCopyModule: (m: string) => void
   onOpen: () => void
@@ -696,17 +915,27 @@ function RequirementCard({
 }) {
   const meta = STATUS_META[r.status]
   return (
-    <div className="space-y-2 px-4 py-3.5">
-      {/* 首行：状态 chip + 操作 */}
+    <div className={`space-y-2 px-4 py-3.5 ${selected ? 'bg-indigo-50/50 dark:bg-indigo-500/5' : ''}`}>
+      {/* 首行：批量模式下的复选框 + 状态 chip + 操作 */}
       <div className="flex items-center justify-between gap-2">
-        <button
-          onClick={() => onFilterStatus(r.status)}
-          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.color} bg-slate-100 dark:bg-slate-800`}
-          title={`筛选「${meta.label}」状态`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-          {meta.label}
-        </button>
+        <div className="flex items-center gap-2">
+          {selectMode && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelect}
+              className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700"
+            />
+          )}
+          <button
+            onClick={() => onFilterStatus(r.status)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.color} bg-slate-100 dark:bg-slate-800`}
+            title={`筛选「${meta.label}」状态`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+            {meta.label}
+          </button>
+        </div>
         <div className="flex gap-1">
           <button
             onClick={onEdit}

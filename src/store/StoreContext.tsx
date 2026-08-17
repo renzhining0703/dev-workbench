@@ -28,6 +28,8 @@ interface Store {
   addRequirement: (draft: Omit<Requirement, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateRequirement: (draft: Requirement) => void
   removeRequirement: (id: string) => void
+  /** 恢复已删除的需求（保留原始 id/createdAt，用于撤销删除） */
+  restoreRequirement: (item: Requirement) => void
   /** 批量导入（id 去重合并），返回实际导入条数 */
   importRequirements: (items: MigratedRequirement[]) => number
   addTodo: (content: string, date: string) => void
@@ -93,6 +95,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const removeRequirement = useCallback((id: string) => {
     setRequirements((prev) => {
       const next = prev.filter((r) => r.id !== id)
+      saveRequirements(next)
+      return next
+    })
+  }, [])
+
+  /** 恢复已删除的需求（保留原始 id/createdAt） */
+  const restoreRequirement = useCallback((item: Requirement) => {
+    setRequirements((prev) => {
+      if (prev.some((r) => r.id === item.id)) return prev
+      const next = [item, ...prev]
       saveRequirements(next)
       return next
     })
@@ -226,6 +238,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addRequirement,
       updateRequirement,
       removeRequirement,
+      restoreRequirement,
       importRequirements,
       addTodo,
       toggleTodo,
@@ -236,7 +249,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       initProjects,
       restoreAll,
     }),
-    [requirements, todos, projects, addRequirement, updateRequirement, removeRequirement, importRequirements, addTodo, toggleTodo, removeTodo, addProject, updateProject, removeProject, initProjects, restoreAll],
+    [requirements, todos, projects, addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements, addTodo, toggleTodo, removeTodo, addProject, updateProject, removeProject, initProjects, restoreAll],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
