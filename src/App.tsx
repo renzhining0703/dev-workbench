@@ -69,6 +69,8 @@ export default function App() {
   const [notifyGranted, setNotifyGranted] = useState(
     () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
   )
+  const [notifyToast, setNotifyToast] = useState<{ tone: 'ok' | 'warn'; title: string; desc?: string } | null>(null)
+  const notifyToastTimerRef = useRef<number | null>(null)
 
   // 首次启动自动导入：本地无任何需求且从未导入过时，自动载入 public/import-data.json
   // （不再依赖 #import 参数，任何 URL 打开都会触发一次；导入成功后打标记避免重复）
@@ -122,12 +124,38 @@ export default function App() {
   }, [])
 
   // 启动时若未授权，主动请求（用于今日上线桌面提醒）
+  const showNotifyToast = useCallback((t: { tone: 'ok' | 'warn'; title: string; desc?: string }) => {
+    setNotifyToast(t)
+    if (notifyToastTimerRef.current !== null) window.clearTimeout(notifyToastTimerRef.current)
+    notifyToastTimerRef.current = window.setTimeout(() => setNotifyToast(null), 8000)
+  }, [])
+
   const requestNotify = useCallback(() => {
     if (typeof Notification === 'undefined') return
+    // 权限已被浏览器拒绝时不会再弹授权框，requestPermission 会静默返回 denied
+    if (Notification.permission === 'denied') {
+      showNotifyToast({
+        tone: 'warn',
+        title: '通知权限已被浏览器拒绝',
+        desc: '点击地址栏左侧的站点设置图标，把「通知」改为允许，再回到本页重新开启。',
+      })
+      return
+    }
     Notification.requestPermission().then((p) => {
       setNotifyGranted(p === 'granted')
+      if (p === 'granted') {
+        showNotifyToast({ tone: 'ok', title: '已开启上线提醒', desc: '今日有需求上线时会收到桌面通知。' })
+      } else if (p === 'denied') {
+        showNotifyToast({
+          tone: 'warn',
+          title: '通知权限被拒绝',
+          desc: '点击地址栏左侧的站点设置图标，把「通知」改为允许，再回到本页重新开启。',
+        })
+      } else {
+        showNotifyToast({ tone: 'warn', title: '未开启通知', desc: '可在「更多」菜单中再次开启。' })
+      }
     })
-  }, [])
+  }, [showNotifyToast])
 
   const handleSave = (draft: RequirementDraft) => {
     if (editing) {
@@ -296,6 +324,39 @@ export default function App() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M18 6 6 18M6 6l12 12" />
               </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 通知授权反馈 toast */}
+      {notifyToast && (
+        <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
+          <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-sm ${notifyToast.tone === 'ok' ? 'bg-indigo-600' : 'bg-amber-500'}`}>
+              {notifyToast.tone === 'ok' ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />
+                </svg>
+              )}
+            </div>
+            <div className="flex-1 text-sm text-slate-700 dark:text-slate-200">
+              <p className="font-medium">{notifyToast.title}</p>
+              {notifyToast.desc && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">{notifyToast.desc}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setNotifyToast(null)}
+              className="rounded px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+              aria-label="关闭"
+            >
+              知道了
             </button>
           </div>
         </div>
