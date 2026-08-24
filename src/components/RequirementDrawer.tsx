@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Requirement, RequirementStatus } from '../types'
-import { STATUS_META, STATUS_FLOW } from '../types'
+import { STATUS_FLOW, statusMeta } from '../types'
 import { fmtDate, isDateToday, copyToClipboard } from '../lib/utils'
 import { Select, statusSelectOptions } from './Select'
 
@@ -32,7 +32,7 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
 
   if (!requirement) return null
   const r = requirement
-  const meta = STATUS_META[r.status]
+  const meta = statusMeta(r.status)
 
   function copyField(field: string, text: string) {
     if (!text) return
@@ -168,7 +168,7 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
                             : 'text-slate-400 dark:text-slate-500'
                       }`}
                     >
-                      {STATUS_META[s].label}
+                      {statusMeta(s).label}
                     </span>
                     {i < STATUS_FLOW.length - 1 && (
                       <span className="text-slate-300 dark:text-slate-600">→</span>

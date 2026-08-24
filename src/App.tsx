@@ -17,6 +17,7 @@ import { PreferencesModal } from './components/PreferencesModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
 import { AuthPage } from './components/AuthPage'
 import { UserMenu } from './components/UserMenu'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthProvider, useAuth } from './store/AuthContext'
 import { findAutoArchiveTargets } from './lib/archive'
 import { parseImportData } from './lib/migrate'
@@ -68,11 +69,13 @@ function AppShell() {
 
   return (
     <StoreProvider pushTrigger={pushTrigger}>
-      {auth.session || auth.guest ? (
-        <AppRoot syncRef={syncRef} auth={auth} />
-      ) : (
-        <AuthPage />
-      )}
+      <ErrorBoundary>
+        {auth.session || auth.guest ? (
+          <AppRoot syncRef={syncRef} auth={auth} />
+        ) : (
+          <AuthPage />
+        )}
+      </ErrorBoundary>
     </StoreProvider>
   )
 }
@@ -116,16 +119,21 @@ function AppRoot({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // session 变化 → sync.setSession；登出时清空本地数据
+  // session 变化 → sync.setSession
+  // 仅在「换账号登录」时清空本地数据（防止账号 A 的数据被推到账号 B）。
+  // 登出 / 会话过期（401）不再清空：本地数据保留，重新登录同一账号后由
+  // push/pull 合并恢复；避免服务端短暂不可用或 token 失效就毁掉本地数据。
+  // lastUsername 跨登出持久记录：登出(账号A) → 登录(账号B) 也能正确识别切换。
+  const lastUsername = useRef<string | null>(null)
   useEffect(() => {
     const cur = auth.session
     const prev = prevSession.current
     if (cur?.token === prev?.token && cur?.user.username === prev?.user.username) return
 
-    // 用户切换（登出或换账号）：清本地数据
-    if (prev && (!cur || cur.user.username !== prev.user.username)) {
+    if (cur && lastUsername.current && cur.user.username !== lastUsername.current) {
       store.clearAll()
     }
+    if (cur) lastUsername.current = cur.user.username
 
     syncRef.current?.setSession(cur?.token ?? null, cur?.user ?? null)
     prevSession.current = cur

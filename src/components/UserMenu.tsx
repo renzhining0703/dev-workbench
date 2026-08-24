@@ -120,7 +120,7 @@ export function UserMenu({ sync }: Props) {
       <ConfirmDialog
         open={confirmLogout}
         title="确认退出登录？"
-        message={`退出后将清空本地数据，下次访问需要重新登录${auth.session ? `「${auth.session.user.username}」` : ''}。`}
+        message={`退出后数据仍保留在本地与云端，重新登录「${auth.session?.user.username ?? ''}」即可恢复同步。`}
         confirmLabel="退出登录"
         onCancel={() => setConfirmLogout(false)}
         onConfirm={doLogout}

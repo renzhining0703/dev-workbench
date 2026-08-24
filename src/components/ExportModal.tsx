@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { addMonths, format, parse } from 'date-fns'
 import type { Requirement } from '../types'
-import { STATUS_META } from '../types'
+import { statusMeta } from '../types'
 import { copyToClipboard, exportCsv, fmtDate } from '../lib/utils'
 import { Modal } from './ui'
 
@@ -65,7 +65,7 @@ export function ExportModal({
         r.project,
         r.branch,
         r.publishModule,
-        STATUS_META[r.status].label,
+        statusMeta(r.status).label,
         fmtDate(r.createdAt),
         fmtDate(r.devStartTime),
         fmtDate(r.devEndTime),

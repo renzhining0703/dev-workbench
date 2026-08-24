@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { RequirementStatus } from '../types'
-import { STATUS_FLOW, STATUS_META } from '../types'
+import { STATUS_FLOW, statusMeta } from '../types'
 
 interface Props {
   counts: Record<RequirementStatus, number>
@@ -89,7 +89,7 @@ export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
               strokeDashoffset={s.dashoffset}
             >
               <title>
-                {STATUS_META[s.status].label}：{s.value} 个
+                {statusMeta(s.status).label}：{s.value} 个
               </title>
             </circle>
           ))}
@@ -114,7 +114,7 @@ export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
               className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: DOT_HEX[status] }}
             />
-            <span className="truncate">{STATUS_META[status].label}</span>
+            <span className="truncate">{statusMeta(status).label}</span>
             <span className="ml-auto pl-2 font-medium tabular-nums text-slate-700 dark:text-slate-200">
               {counts[status]}
             </span>

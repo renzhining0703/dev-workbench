@@ -73,6 +73,14 @@ export const STATUS_META: Record<
   archived: { label: '已归档', color: 'text-slate-400 dark:text-slate-500', dot: 'bg-slate-400' },
 }
 
+/**
+ * 安全取状态元信息：数据可能来自同步服务端/导入/旧版本，
+ * 一条非法 status 不应把整个页面炸成白屏。未知状态降级为「待开发」。
+ */
+export function statusMeta(status: string): { label: string; color: string; dot: string } {
+  return STATUS_META[status as RequirementStatus] ?? STATUS_META.pending
+}
+
 /** 状态流转顺序（用于下拉和排序） */
 export const STATUS_FLOW: RequirementStatus[] = [
   'pending',

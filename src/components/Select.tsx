@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { RequirementStatus } from '../types'
-import { STATUS_FLOW, STATUS_META } from '../types'
+import { STATUS_FLOW, statusMeta } from '../types'
 
 export interface SelectOption<T extends string> {
   value: T
@@ -310,7 +310,7 @@ export function Select<T extends string>({
 /** 需求状态下拉选项（带状态色小圆点） */
 export const statusSelectOptions: SelectOption<RequirementStatus>[] = STATUS_FLOW.map((s) => ({
   value: s,
-  label: STATUS_META[s].label,
-  dot: STATUS_META[s].dot,
-  color: STATUS_META[s].color,
+  label: statusMeta(s).label,
+  dot: statusMeta(s).dot,
+  color: statusMeta(s).color,
 }))

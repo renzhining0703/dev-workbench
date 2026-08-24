@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Requirement, RequirementStatus } from '../types'
-import { STATUS_FLOW, STATUS_META } from '../types'
+import { STATUS_FLOW, statusMeta } from '../types'
 import { copyToClipboard, exportCsv, fmtDate, fmtDateShort, isDateToday } from '../lib/utils'
 import { highlight } from '../lib/highlight'
 import { extractProjectNames } from '../lib/projects'
@@ -329,7 +329,7 @@ export function RequirementTable({
       ['需求名称', '项目', '分支', '发布模块', '状态', '创建时间', '开发开始', '开发结束', '提测时间', '上线时间', '备注'],
       items.map((r) => [
         r.name, r.project, r.branch, r.publishModule,
-        STATUS_META[r.status].label,
+        statusMeta(r.status).label,
         fmtDate(r.createdAt), fmtDate(r.devStartTime), fmtDate(r.devEndTime),
         fmtDate(r.testTime), fmtDate(r.publishTime), r.remark,
       ]),
@@ -379,7 +379,7 @@ export function RequirementTable({
                       : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
                   }`}
                 >
-                  {STATUS_META[s].label}
+                  {statusMeta(s).label}
                   <span className="ml-1 opacity-70">{counts[s]}</span>
                 </button>
               ))}
@@ -395,7 +395,7 @@ export function RequirementTable({
                       : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
                   }`}
                 >
-                  {STATUS_META[s].label}
+                  {statusMeta(s).label}
                   <span className="ml-1 opacity-70">{counts[s]}</span>
                 </button>
               ))}
@@ -446,8 +446,8 @@ export function RequirementTable({
                                   : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50'
                               }`}
                             >
-                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_META[s].dot}`} />
-                              {STATUS_META[s].label}
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusMeta(s).dot}`} />
+                              {statusMeta(s).label}
                               <span className="ml-auto opacity-70">{counts[s]}</span>
                             </button>
                           )
@@ -756,9 +756,9 @@ export function RequirementTable({
                           <button
                             onClick={() => setStatusFilter(r.status)}
                             className="group/dot shrink-0 rounded-full p-1 transition hover:bg-slate-100 dark:hover:bg-slate-800"
-                            title={`筛选「${STATUS_META[r.status].label}」状态`}
+                            title={`筛选「${statusMeta(r.status).label}」状态`}
                           >
-                            <span className={`block h-2.5 w-2.5 rounded-full transition group-hover/dot:scale-125 ${STATUS_META[r.status].dot}`} />
+                            <span className={`block h-2.5 w-2.5 rounded-full transition group-hover/dot:scale-125 ${statusMeta(r.status).dot}`} />
                           </button>
                           <Select
                             size="sm"
@@ -930,7 +930,7 @@ function RequirementCard({
   onDelete: () => void
   onFilterStatus: (s: RequirementStatus) => void
 }) {
-  const meta = STATUS_META[r.status]
+  const meta = statusMeta(r.status)
   return (
     <div className={`space-y-2 px-4 py-3.5 ${selected ? 'bg-indigo-50/50 dark:bg-indigo-500/5' : ''}`}>
       {/* 首行：批量模式下的复选框 + 状态 chip + 操作 */}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { DragEvent } from 'react'
 import type { Requirement, RequirementStatus } from '../types'
-import { STATUS_META } from '../types'
+import { statusMeta } from '../types'
 import { fmtDateShort } from '../lib/utils'
 
 /**
@@ -155,7 +155,7 @@ export function RequirementKanban({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {KANBAN_COLUMNS.map((col) => {
           const list = columns.get(col) ?? []
-          const meta = STATUS_META[col]
+          const meta = statusMeta(col)
           const isOver = dragOverCol === col
           return (
             <div

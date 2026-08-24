@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 /** 模态弹窗 */
 export function Modal({
   open,
@@ -21,7 +22,9 @@ export function Modal({
   }, [open, onClose])
 
   if (!open) return null
-  return (
+  // Portal 到 body：弹窗可能被渲染在带 backdrop-filter/transform 的容器内
+  // （如 sticky header），那些属性会让 position:fixed 相对该容器定位，弹窗被钉在顶部
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm sm:items-center"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
@@ -45,7 +48,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -77,7 +81,8 @@ export function ConfirmDialog({
   }, [open, onCancel])
 
   if (!open) return null
-  return (
+  // 同 Modal：Portal 到 body，避免被祖先容器的 backdrop-filter 破坏 fixed 定位
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
@@ -90,7 +95,8 @@ export function ConfirmDialog({
           <button className="btn-danger" onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
