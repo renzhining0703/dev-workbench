@@ -11,24 +11,33 @@
  *
  * 断言全部对照旧版（node:http 手写版）的真实行为，新 Express 版必须逐条通过。
  */
-const BASE_URL = process.argv[2] ?? process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:8787'
-const INVITE_CODE = process.env.SMOKE_INVITE_CODE ?? 'smoke-invite-1234'
-const USERNAME = `smoke_${Date.now().toString(36).slice(-5)}` // 满足 ^[a-z0-9_]{3,20}$
-const PASSWORD = 'smoke-password-123'
+const T = (s) => `2026-0${s}T00:00:00.000Z` // 确定性时间戳辅助
 
-let passed = 0
-let failed = 0
-const failures = []
+/**
+ * 运行全部冒烟断言。
+ * - CLI：node test/smoke.mjs [BASE_URL]（BASE_URL 默认 http://127.0.0.1:8787）
+ * - 库模式：import { runSmoke } from './smoke.mjs'（供 api.test.mjs in-process 复用）
+ * 返回 { passed, failed, failures }
+ */
+export async function runSmoke(baseUrl, { inviteCode = 'smoke-invite-1234' } = {}) {
+  const BASE_URL = baseUrl
+  const INVITE_CODE = inviteCode
+  const USERNAME = `smoke_${Date.now().toString(36).slice(-5)}`
+  const PASSWORD = 'smoke-password-123'
 
-function check(name, cond, detail = '') {
-  if (cond) {
-    passed++
-  } else {
-    failed++
-    failures.push(`${name}${detail ? ` :: ${detail}` : ''}`)
-    console.error(`  ✗ ${name}${detail ? ` :: ${detail}` : ''}`)
+  let passed = 0
+  let failed = 0
+  const failures = []
+
+  function check(name, cond, detail = '') {
+    if (cond) {
+      passed++
+    } else {
+      failed++
+      failures.push(`${name}${detail ? ` :: ${detail}` : ''}`)
+      console.error(`  ✗ ${name}${detail ? ` :: ${detail}` : ''}`)
+    }
   }
-}
 
 async function req(method, path, { token, body, rawBody, origin } = {}) {
   const headers = {}
@@ -62,11 +71,6 @@ function stripVolatile(data) {
   const { serverTs, ...rest } = data
   return rest
 }
-
-const T = (s) => `2026-0${s}T00:00:00.000Z` // 确定性时间戳辅助
-
-async function main() {
-  console.log(`[smoke] target: ${BASE_URL}`)
 
   /* ---------- 1. health ---------- */
   {
@@ -263,6 +267,13 @@ async function main() {
 
   /* ---------- 结果 ---------- */
   console.log(`\n[smoke] ${passed} passed, ${failed} failed`)
+  return { passed, failed, failures }
+}
+
+async function main() {
+  const baseUrl = process.argv[2] ?? process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:8787'
+  console.log(`[smoke] target: ${baseUrl}`)
+  const { passed, failed, failures } = await runSmoke(baseUrl)
   if (failed > 0) {
     console.error('[smoke] FAILED cases:')
     for (const f of failures) console.error(`  - ${f}`)
@@ -271,7 +282,11 @@ async function main() {
   console.log('[smoke] ALL PASSED ✓')
 }
 
-main().catch((e) => {
-  console.error('[smoke] fatal:', e)
-  process.exit(1)
-})
+// CLI 直跑时才执行（被 import 时不执行）
+import { pathToFileURL } from 'node:url'
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error('[smoke] fatal:', e)
+    process.exit(1)
+  })
+}

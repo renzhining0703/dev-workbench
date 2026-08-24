@@ -1,27 +1,66 @@
-# dev-workbench-sync
+# dev-workbench-sync v2
 
-轻量后端：为 dev-workbench 提供多用户登录 + 每用户独立数据存储。
+轻量后端：为 dev-workbench 提供多用户登录 + 每用户独立数据同步。
 
-零业务依赖，只用 Node.js 内置 `http / fs / crypto`。密码哈希用 `crypto.scrypt`，session token 是 32 字节随机 hex。
+**v2 架构**：Express 4 + `node:sqlite`（Node ≥ 22.5 内置，零原生编译）。仅 2 个直接依赖（express、express-rate-limit），API 契约与 v1 完全一致，前端零改动。
+
+```
+server/
+├── index.mjs        # 入口：listen + 优雅关闭
+├── app.mjs          # createApp()：中间件挂载（可单测）
+├── config.mjs       # 环境变量 → 配置对象（loadConfig(env) 可注入）
+├── db.mjs           # node:sqlite 初始化 + WAL + schema 迁移
+├── startup.mjs      # 首启钩子：v1 JSON 自动导入 + bootstrap 账户
+├── migrate.mjs      # v1 JSON → SQLite 导入/校验（被 startup 与脚本复用）
+├── middleware/
+│   └── auth.mjs     # Bearer 校验（sessions 表索引查询）
+├── routes/
+│   ├── auth.mjs     # register/login/logout/me + 限流
+│   └── sync.mjs     # health/snapshot/push（事务化 LWW 合并）
+├── store/
+│   ├── users.mjs    # 用户表 CRUD
+│   ├── sessions.mjs # 会话（token 只存 SHA-256；单会话互踢）
+│   └── snapshots.mjs# 快照（update() 事务包住读-改-写）
+├── lib/
+│   ├── password.mjs # scrypt 三件套（v1 平移）
+│   ├── token.mjs    # token 生成/哈希
+│   └── merge.mjs    # LWW 合并纯函数（零 IO，test 固化行为）
+├── scripts/
+│   └── migrate-json-to-sqlite.mjs  # 手动迁移（dry-run / --apply，幂等）
+└── test/
+    ├── smoke.mjs        # 行为基线冒烟（新旧后端通用对拍，49 断言）
+    ├── merge.test.mjs   # 合并纯函数单测
+    └── api.test.mjs     # in-process 集成测试（跑同一套冒烟断言）
+```
 
 ---
 
-## 启动
+## 快速开始
 
 ```bash
-# 首次部署：开放注册（不配置 INVITE_CODE）+ 自动建 admin 账户
-INVITE_CODE=$(openssl rand -hex 8) \
-BOOTSTRAP_USER=admin \
-ALLOWED_ORIGINS='http://localhost:5173,http://211.159.169.153' \
-  pm2 start ecosystem.config.cjs --update-env
-
-pm2 save
-pm2 startup   # 按提示执行返回的命令
+cd server
+npm install          # express + express-rate-limit
+npm test             # 12 项单测 + 49 项行为对拍，全绿才可部署
+npm start            # 默认 127.0.0.1:8787
 ```
 
-启动后日志会打印 `[bootstrap]` 段，里面是 `admin` 账户的随机密码 —— **只打印这一次**，请立刻记下并登录修改。
+生产部署走根目录 `yarn pub`（publish.sh 会连 server 一起发布并 pm2 reload）。
 
-`INVITE_CODE` 设置后，访问 `/` 时 UI 注册 tab 会要求填邀请码（与服务端 `INVITE_CODE` 必须一致）。不设置 = 开放注册。
+---
+
+## v1 → v2 数据迁移（自动）
+
+**无需手动操作**：v2 首次启动发现 users 表为空且 `data/users.json` 存在时，自动导入全部用户、快照与已登录会话（token 不失效）。v1 JSON 文件保留原位，确认服务正常后可删。
+
+手动迁移（推荐先 dry-run 验证）：
+
+```bash
+cd server
+node scripts/migrate-json-to-sqlite.mjs           # dry-run：临时库试迁移 + 逐字段校验
+node scripts/migrate-json-to-sqlite.mjs --apply   # 写入真实库（幂等，可重跑）
+```
+
+校验内容：密码哈希/盐逐字段比对、快照逐字节比对、会话存在性。任何不一致即中止。
 
 ---
 
@@ -31,69 +70,27 @@ pm2 startup   # 按提示执行返回的命令
 |---|---|---|
 | `PORT` | `8787` | HTTP 端口 |
 | `HOST` | `127.0.0.1` | 监听地址（仅本机，由 nginx 反代） |
-| `DATA_DIR` | `./data/` | 数据根目录（含 `users.json` + `users/<u>.json`） |
-| `USERS_FILE` | `<DATA_DIR>users.json` | 用户表 JSON 路径 |
-| `USER_DATA_DIR` | `<DATA_DIR>users/` | 每用户 snapshot 目录 |
-| `LEGACY_STORE_FILE` | 空 | 旧版（单 token）`store.json` 路径；启动时若 `users.json` 不存在则自动迁移到 `BOOTSTRAP_USER` 名下 |
-| `BOOTSTRAP_USER` | 空 | 首次启动时若 `users.json` 为空，自动创建该账户并打印密码 |
+| `DATA_DIR` | `./data/` | 数据根目录（`sync.db` 与旧 JSON 都在这里） |
+| `DB_FILE` | `<DATA_DIR>sync.db` | SQLite 数据库文件 |
+| `LEGACY_USERS_FILE` | `<DATA_DIR>users.json` | v1 用户表（首启自动导入） |
+| `LEGACY_USER_DATA_DIR` | `<DATA_DIR>users/` | v1 快照目录 |
+| `LEGACY_STORE_FILE` | 空 | 更早期单 token 的 store.json（导入为 BOOTSTRAP_USER 快照） |
+| `BOOTSTRAP_USER` | 空 | 首启自动创建的账户；密码写入 `<DATA_DIR>bootstrap-password.txt`（0600），不再打日志 |
 | `INVITE_CODE` | 空 | 注册时校验；空 = 开放注册 |
-| `RATE_LIMIT_PER_MIN` | `20` | `/api/auth/*` 每 IP 每分钟上限 |
+| `RATE_LIMIT_PER_MIN` | `20` | `/api/auth/register|login` 每 IP 每分钟上限 |
 | `ALLOWED_ORIGINS` | `http://localhost:5173,http://211.159.169.153` | 逗号分隔允许 origin |
 
 ---
 
-## 升级 / 迁移
+## 数据格式（SQLite）
 
-如果是从旧版（共享 `AUTH_TOKEN`）升级：
-
-1. 停服：`pm2 stop dev-workbench-sync`
-2. 上传新代码
-3. 启动时同时配置 `LEGACY_STORE_FILE=/var/www/dev-workbench-sync/data/store.json` + `BOOTSTRAP_USER=<你的用户名>`：
-   ```bash
-   LEGACY_STORE_FILE=/var/www/dev-workbench-sync/data/store.json \
-   BOOTSTRAP_USER=alice \
-   INVITE_CODE=<你定的> \
-   ALLOWED_ORIGINS='http://localhost:5173,http://211.159.169.153' \
-     pm2 start ecosystem.config.cjs --update-env
-   ```
-4. 启动日志会显示 `[migration] moved .../store.json → .../users/alice.json` —— 旧数据自动迁移完毕
-5. 用 admin（或你迁过去的用户名）+ 日志里打印的密码登录；登录后即可正常使用
-
-迁移完成后 `data/store.json` 不再被新代码读取，可以手动删掉。
-
----
-
-## 数据格式
-
-### `data/users.json`
-
-```json
-[
-  {
-    "username": "alice",
-    "pwHashHex": "<scrypt hash hex>",
-    "saltHex": "<16 字节 hex>",
-    "tokenHex": "<32 字节 hex 或 null>",
-    "createdAt": "ISO8601",
-    "updatedAt": "ISO8601"
-  }
-]
+```sql
+users     (username PK, pw_hash, salt, created_at, updated_at)
+sessions  (token_hash PK, username FK, created_at)   -- token 只存 SHA-256
+snapshots (username PK, data)                        -- 快照整包 JSON
 ```
 
-### `data/users/<username>.json`
-
-```json
-{
-  "version": 1,
-  "serverTs": "ISO8601",
-  "requirements": [...],
-  "todos": [...],
-  "projects": [...],
-  "settings": { "autoArchiveMonths": 3 }
-}
-```
-
-合并策略：同 id 两边都有 → `updatedAt` 大的胜；缺字段时降级 `createdAt`。
+合并策略与 v1 完全一致：同 id 两边都有 → `updatedAt` 大的胜（缺则降级 `createdAt`）；settings 对象展开合并。
 
 ---
 
@@ -107,7 +104,7 @@ pm2 startup   # 按提示执行返回的命令
 |---|---|---|
 | `GET /api/health` | — | `{ ok:true, data:{version, ts} }` |
 | `POST /api/auth/register` | `{ username, password, inviteCode? }` | `{ ok, data:{user:{username}, token} }`；失败统一 401 `invalid credentials` |
-| `POST /api/auth/login` | `{ username, password }` | 同上；登录会重置 token（token rotation） |
+| `POST /api/auth/login` | `{ username, password }` | 同上；登录轮换 token（单会话互踢） |
 
 ### 鉴权（`Authorization: Bearer <token>`）
 
@@ -116,25 +113,39 @@ pm2 startup   # 按提示执行返回的命令
 | `POST /api/auth/logout` | 204；服务端清掉该 token |
 | `GET /api/auth/me` | `{ ok, data:{user:{username}} }` |
 | `GET /api/snapshot` | 返回当前用户全量 + `serverTs` |
-| `POST /api/push` | 接收客户端全量做字段级 LWW 合并，落盘当前用户文件，返回合并结果 |
+| `POST /api/push` | 接收客户端全量做字段级 LWW 合并（事务内），落盘并返回合并结果 |
 
 ---
 
 ## 安全模型
 
-| 维度 | 当前 | 备注 |
+| 维度 | v2 | 备注 |
 |---|---|---|
-| 密码存储 | scrypt (N=16384, r=8, p=1) + 16 字节 salt | 零依赖；~80ms/次 |
-| 登录失败信息 | 统一 `invalid credentials` | 防用户名枚举；scrypt 始终跑（dummy hash） |
-| 限流 | 20 req/min/IP，仅 `/api/auth/*` | 单进程内存计数器 |
-| 用户名规则 | `^[a-z0-9_]{3,20}$` | 前后端都校验 |
-| 忘记密码 | 无（v1） | 联系管理员用 `node -e` 改 `pwHashHex`；v2 加 UI |
-| XSS 偷 token | localStorage 可读 | 项目无第三方脚本；v2 上 httpOnly cookie |
+| 密码存储 | scrypt (N=16384, r=8, p=1) + 16 字节 salt | 与 v1 一致 |
+| 登录失败信息 | 统一 `invalid credentials` + dummy scrypt | 防枚举 |
+| token 落库 | 只存 SHA-256 | v1 存明文；泄露库文件≠泄露会话 |
+| 限流 | express-rate-limit，`trust proxy 1` 还原真实 IP | v1 手取 XFF 首段可被伪造 |
+| 并发写 | push 读-改-写包在 `BEGIN IMMEDIATE` 事务 | v1 并发丢更新 |
+| 忘记密码 | 无（v1 同） | CLI 改 `users` 表；后续可加 UI |
 
 ---
 
-## nginx / vite 配置
+## 测试
 
-nginx 已有的 `/dev-workbench/api/` location 不用动 —— 新端点 `/api/auth/*` 自动被转发。
+```bash
+npm test              # 单测 + 集成（in-process，49 项行为对拍）
+npm run test:smoke    # 对任意运行中的服务跑冒烟（新旧通用）
+```
 
-vite dev 的 `vite.config.ts` 的 `server.proxy['/api']` 也不用动。
+`test/smoke.mjs` 是 v1 行为的固化基线：v2 上线前必须全绿，改动 API 前先改它。
+
+---
+
+## 回滚
+
+```bash
+# 服务器上：
+pm2 stop dev-workbench-sync
+cd /var/www/.bak-sync/.latest   # publish.sh 保留的上一版（v1）
+# 用旧版目录重启 pm2 即可；data/users.json v2 从不删除，v1 直接可用
+```

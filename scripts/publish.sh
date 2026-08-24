@@ -93,10 +93,14 @@ SYNC_UPLOAD_DIR="$(dirname "$SYNC_REMOTE_DIR")/.upload-dev-workbench-sync"
 SYNC_BAK_DIR="${SYNC_BAK_DIR:-/var/www/.bak-sync}"
 
 # 把 server/ 内容（不含 data/）打到压缩包上传，再远端解压
+# v2：node_modules（express 等纯 JS 依赖）一并打包——服务器零安装零编译；
+#     远端 npm install 仅作依赖漂移兜底（失败不影响启动）
 TMP_TGZ="$(mktemp -t dev-workbench-sync.XXXXXX.tar.gz)"
 trap 'rm -f "$TMP_TGZ"' EXIT
 
-tar --exclude='server/data' --exclude='server/node_modules' -czf "$TMP_TGZ" -C server .
+[ -d server/node_modules ] || fail "server/node_modules 不存在，请先在 server/ 下 npm install"
+
+tar --exclude='server/data' --exclude='server/sync.log' -czf "$TMP_TGZ" -C server .
 
 ssh "$SERVER" "rm -rf '$SYNC_UPLOAD_DIR' && mkdir -p '$SYNC_UPLOAD_DIR'"
 scp "$TMP_TGZ" "$SERVER:$SYNC_UPLOAD_DIR/sync.tar.gz"
@@ -110,7 +114,7 @@ ssh "$SERVER" "
   mkdir -p '$SYNC_REMOTE_DIR'
   tar -xzf '$SYNC_UPLOAD_DIR/sync.tar.gz' -C '$SYNC_REMOTE_DIR'
   rm -rf '$SYNC_UPLOAD_DIR'
-  # 无依赖，npm install 仅用于写入 package-lock（如有）；无 node_modules 也可直接 node 跑
+  # node_modules 已随包携带（纯 JS）；npm install 仅作兜底，失败不影响启动
   if [ -f '$SYNC_REMOTE_DIR/package.json' ]; then
     (cd '$SYNC_REMOTE_DIR' && npm install --omit=dev --no-audit --no-fund) || true
   fi
