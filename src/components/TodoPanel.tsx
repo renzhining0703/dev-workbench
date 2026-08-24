@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Requirement, TodoItem } from '../types'
 import { isDateToday, toDateStr } from '../lib/utils'
 import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
+import { TodoRow } from './TodoRow'
 
 /* ---------------- 今日上线提醒 ---------------- */
 
@@ -90,7 +91,10 @@ interface TodoProps {
   requirements: Requirement[]
   onAddTodo: (content: string, date: string) => void
   onToggleTodo: (id: string) => void
+  onUpdateTodo: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done'>>) => void
   onRemoveTodo: (id: string) => void
+  /** 跳转到「待办」Tab（查看全部/历史） */
+  onViewAll?: () => void
 }
 
 export function TodoPanel({
@@ -98,9 +102,12 @@ export function TodoPanel({
   requirements,
   onAddTodo,
   onToggleTodo,
+  onUpdateTodo,
   onRemoveTodo,
+  onViewAll,
 }: TodoProps) {
   const [input, setInput] = useState('')
+  const [overdueOpen, setOverdueOpen] = useState(false)
   const today = toDateStr(new Date())
 
   const todayTodos = useMemo(
@@ -111,6 +118,15 @@ export function TodoPanel({
     [todos, today],
   )
   const doneCount = todayTodos.filter((t) => t.done).length
+
+  // 昨日遗留：目标日期早于今天且未完成
+  const overdueTodos = useMemo(
+    () =>
+      todos
+        .filter((t) => !t.done && t.date < today)
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [todos, today],
+  )
 
   // 今日节点（按开发开始/提测/上线时间聚合）
   const todayTasks = useMemo(() => {
@@ -161,9 +177,19 @@ export function TodoPanel({
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
             今日待办
           </h3>
-          <span className="text-xs text-slate-400">
-            {doneCount}/{todayTodos.length} 已完成
-          </span>
+          <div className="flex items-center gap-3">
+            {onViewAll && (
+              <button
+                className="text-xs text-blue-600 transition hover:text-blue-500 dark:text-blue-400"
+                onClick={onViewAll}
+              >
+                查看全部 →
+              </button>
+            )}
+            <span className="text-xs text-slate-400">
+              {doneCount}/{todayTodos.length} 已完成
+            </span>
+          </div>
         </div>
 
         <div className="mb-3 flex gap-2">
@@ -177,6 +203,65 @@ export function TodoPanel({
           <button className="btn-primary" onClick={submit}>添加</button>
         </div>
 
+        {/* 昨日遗留 */}
+        {overdueTodos.length > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2 text-left"
+              onClick={() => setOverdueOpen((v) => !v)}
+            >
+              <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                📥 昨日遗留 {overdueTodos.length} 条
+              </span>
+              <span className="text-xs text-amber-600/80 dark:text-amber-400/80">
+                {overdueOpen ? '收起' : '展开'}
+              </span>
+              <span className="ml-auto text-xs text-amber-600 dark:text-amber-400">
+                {overdueOpen ? '▲' : '▼'}
+              </span>
+            </button>
+            {overdueOpen && (
+              <div className="px-2 pb-2">
+                <div className="mb-1 flex justify-end">
+                  <button
+                    className="rounded-md px-2 py-1 text-xs text-amber-700 transition hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-500/20"
+                    onClick={() => overdueTodos.forEach((t) => onUpdateTodo(t.id, { date: today }))}
+                  >
+                    全部顺延到今天
+                  </button>
+                </div>
+                <ul className="space-y-1">
+                  {overdueTodos.map((t) => (
+                    <li key={t.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5">
+                      <button
+                        onClick={() => onToggleTodo(t.id)}
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-300 text-transparent transition hover:border-emerald-400 dark:border-slate-600"
+                        aria-label="标记完成"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      </button>
+                      <span className="flex-1 truncate text-sm text-slate-600 dark:text-slate-300" title={t.content}>
+                        {t.content}
+                      </span>
+                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                        {t.date.slice(5)}
+                      </span>
+                      <button
+                        className="shrink-0 rounded px-1.5 py-0.5 text-xs text-slate-500 transition hover:text-blue-500"
+                        onClick={() => onUpdateTodo(t.id, { date: today })}
+                      >
+                        顺延
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         {todayTodos.length === 0 ? (
           <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">
             今天暂无待办，享受专注的一天 ☕
@@ -184,42 +269,13 @@ export function TodoPanel({
         ) : (
           <ul className="space-y-1">
             {todayTodos.map((t) => (
-              <li
+              <TodoRow
                 key={t.id}
-                className="group flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
-              >
-                <button
-                  onClick={() => onToggleTodo(t.id)}
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
-                    t.done
-                      ? 'border-emerald-500 bg-emerald-500 text-white'
-                      : 'border-slate-300 text-transparent hover:border-emerald-400 dark:border-slate-600'
-                  }`}
-                  aria-label={t.done ? '标记未完成' : '标记完成'}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                </button>
-                <span
-                  className={`flex-1 text-sm ${
-                    t.done
-                      ? 'text-slate-400 line-through dark:text-slate-500'
-                      : 'text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  {t.content}
-                </span>
-                <button
-                  onClick={() => onRemoveTodo(t.id)}
-                  className="rounded p-1 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100 dark:text-slate-600"
-                  aria-label="删除待办"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <path d="M18 6 6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </li>
+                todo={t}
+                onToggle={onToggleTodo}
+                onUpdate={onUpdateTodo}
+                onRemove={onRemoveTodo}
+              />
             ))}
           </ul>
         )}

@@ -61,6 +61,12 @@ export interface TodoItem {
   /** 目标日期 yyyy-MM-dd */
   date: string
   done: boolean
+  /** 完成时间 ISO：勾选时写入，取消勾选清除（历史/统计用） */
+  completedAt?: string
+  /** 优先级（预留字段，UI 未启用）：缺省 normal */
+  priority?: 'low' | 'normal' | 'high'
+  /** 关联需求 id（预留字段，UI 未启用）：从今日节点一键生成待办时写入 */
+  requirementId?: string
   createdAt: string
   /** 最后更新时间（同步用，缺字段视为 createdAt） */
   updatedAt?: string

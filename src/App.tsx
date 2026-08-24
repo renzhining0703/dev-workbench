@@ -8,6 +8,7 @@ import { RequirementTable } from './components/RequirementTable'
 import { RequirementKanban } from './components/RequirementKanban'
 import { ProjectManagerModal } from './components/ProjectManagerModal'
 import { PublishReminder, TodoPanel } from './components/TodoPanel'
+import { TodoView } from './components/TodoView'
 import { ExportModal } from './components/ExportModal'
 import { ImportModal } from './components/ImportModal'
 import { BackupModal } from './components/BackupModal'
@@ -25,7 +26,7 @@ import { hasProjectInitFlag, markProjectInit } from './lib/storage'
 import { seedProjects } from './data/seedProjects'
 import { startSync, type SyncHandle } from './lib/sync'
 
-type Tab = 'today' | 'list' | 'stats'
+type Tab = 'today' | 'todo' | 'list' | 'stats'
 type ListView = 'table' | 'kanban'
 
 /** 首次启动自动导入历史数据的一次性标记（避免清空数据后又自动填回） */
@@ -475,6 +476,7 @@ function AppInner({
             {(
               [
                 ['today', '今日概览'],
+                ['todo', '待办'],
                 ['list', '需求列表'],
                 ['stats', '统计'],
               ] as [Tab, string][]
@@ -637,6 +639,7 @@ function AppInner({
           {(
             [
               ['today', '今日概览'],
+              ['todo', '待办'],
               ['list', '需求列表'],
               ['stats', '统计'],
             ] as [Tab, string][]
@@ -681,9 +684,19 @@ function AppInner({
               requirements={store.requirements}
               onAddTodo={store.addTodo}
               onToggleTodo={store.toggleTodo}
+              onUpdateTodo={store.updateTodo}
               onRemoveTodo={store.removeTodo}
+              onViewAll={() => setTab('todo')}
             />
           </div>
+        ) : tab === 'todo' ? (
+          <TodoView
+            todos={store.todos}
+            onAddTodo={store.addTodo}
+            onToggleTodo={store.toggleTodo}
+            onUpdateTodo={store.updateTodo}
+            onRemoveTodo={store.removeTodo}
+          />
         ) : tab === 'list' ? (
           <>
             <div className="mb-3 inline-flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">

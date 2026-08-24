@@ -57,6 +57,8 @@ interface Store {
   importRequirements: (items: MigratedRequirement[]) => number
   addTodo: (content: string, date: string) => void
   toggleTodo: (id: string) => void
+  /** 编辑待办（内容 / 目标日期）；done 变化时同步维护 completedAt */
+  updateTodo: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done'>>) => void
   removeTodo: (id: string) => void
   /** 项目库维护（名称去重），返回是否成功 */
   addProject: (name: string, moduleBased?: boolean) => boolean
@@ -242,14 +244,45 @@ export function StoreProvider({
 
   const toggleTodo = useCallback((id: string) => {
     setTodos((prev) => {
-      const next = prev.map((t) =>
-        t.id === id ? { ...t, done: !t.done, updatedAt: nowISO() } : t,
-      )
+      const next = prev.map((t) => {
+        if (t.id !== id) return t
+        const done = !t.done
+        return {
+          ...t,
+          done,
+          // 勾选时记录完成时间，取消勾选清除（历史/统计用）
+          completedAt: done ? nowISO() : undefined,
+          updatedAt: nowISO(),
+        }
+      })
       saveTodos(next)
       triggerRef.current()
       return next
     })
   }, [])
+
+  /** 编辑待办：patch 内 done 变化时同步维护 completedAt */
+  const updateTodo = useCallback(
+    (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done'>>) => {
+      setTodos((prev) => {
+        const next = prev.map((t) => {
+          if (t.id !== id) return t
+          const done = patch.done ?? t.done
+          const completedAt =
+            patch.done === undefined
+              ? t.completedAt
+              : done
+                ? (t.completedAt ?? nowISO())
+                : undefined
+          return { ...t, ...patch, done, completedAt, updatedAt: nowISO() }
+        })
+        saveTodos(next)
+        triggerRef.current()
+        return next
+      })
+    },
+    [],
+  )
 
   /** 删除：打墓碑软删（同步协议需要墓碑传播删除；>90 天物理清理） */
   const removeTodo = useCallback((id: string) => {
@@ -459,6 +492,7 @@ export function StoreProvider({
       importRequirements,
       addTodo,
       toggleTodo,
+      updateTodo,
       removeTodo,
       addProject,
       updateProject,
@@ -472,7 +506,7 @@ export function StoreProvider({
     [
       requirements, todos, projects, archiveMonths, getSyncData,
       addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements,
-      addTodo, toggleTodo, removeTodo,
+      addTodo, toggleTodo, updateTodo, removeTodo,
       addProject, updateProject, removeProject,
       initProjects, restoreAll, setArchiveMonths, applyRemote, clearAll,
     ],
