@@ -14,6 +14,7 @@ const newRequirementBranchPrefix = (): string =>
 const emptyDraft = (): RequirementDraft => ({
   name: '',
   project: '',
+  projects: [],
   branch: newRequirementBranchPrefix(),
   publishModule: '',
   status: 'pending',
@@ -46,15 +47,27 @@ export function RequirementFormModal({
   onSave: (draft: RequirementDraft) => void
 }) {
   const [draft, setDraft] = useState<RequirementDraft>(emptyDraft)
+  // 「+ 添加项目」下拉的开关
+  const [addingProject, setAddingProject] = useState(false)
   // 创建时间只读展示：编辑时取原值，新建/克隆时为今天
   const [createdAtStr, setCreatedAtStr] = useState(() => new Date().toISOString())
 
   const { projects } = useStore()
 
-  /** 项目下拉选项（来自项目库） */
+  /** 项目名 → 是否支持分模块发布 */
+  const moduleBasedMap = useMemo(() => {
+    const map = new Map<string, boolean>()
+    for (const p of projects) map.set(p.name, p.moduleBased ?? false)
+    return map
+  }, [projects])
+
+  /** 项目下拉选项（来自项目库，排除已选中的） */
   const projectOptions = useMemo(
-    () => projects.map((p) => ({ value: p.name, label: p.name })),
-    [projects],
+    () =>
+      projects
+        .filter((p) => !draft.projects.some((x) => x.project === p.name))
+        .map((p) => ({ value: p.name, label: p.name })),
+    [projects, draft.projects],
   )
 
   useEffect(() => {
@@ -65,6 +78,7 @@ export function RequirementFormModal({
       setDraft({
         name: initial.name,
         project: initial.project,
+        projects: initial.projects ?? [],
         branch: initial.branch,
         publishModule: initial.publishModule,
         status: initial.status,
@@ -80,6 +94,7 @@ export function RequirementFormModal({
       setDraft({
         name: prefill.name ? `${prefill.name} (副本)` : '',
         project: prefill.project ?? '',
+        projects: (prefill.projects ?? []).map((p) => ({ ...p })),
         branch: newRequirementBranchPrefix(),
         publishModule: prefill.publishModule ?? '',
         status: 'pending',
@@ -94,6 +109,7 @@ export function RequirementFormModal({
       setCreatedAtStr(new Date().toISOString())
       setDraft(emptyDraft())
     }
+    setAddingProject(false)
   }, [open, initial, prefill])
 
   const set = <K extends keyof RequirementDraft>(key: K, value: RequirementDraft[K]) =>
@@ -101,14 +117,38 @@ export function RequirementFormModal({
 
   const valid = draft.name.trim().length > 0
 
+  /** 项目关联行操作 */
+  const addProjectRef = (name: string) => {
+    setDraft((d) => ({
+      ...d,
+      projects: [...d.projects, { project: name, publishModule: '' }],
+    }))
+    setAddingProject(false)
+  }
+  const removeProjectRef = (name: string) => {
+    setDraft((d) => ({ ...d, projects: d.projects.filter((x) => x.project !== name) }))
+  }
+  const setProjectModule = (name: string, module: string) => {
+    setDraft((d) => ({
+      ...d,
+      projects: d.projects.map((x) => (x.project === name ? { ...x, publishModule: module } : x)),
+    }))
+  }
+
   const submit = () => {
     if (!valid) return
+    // 兼容字段与结构化字段保持一致（旧版本前端/导出/同步兜底）
+    const primary = draft.projects[0]
     onSave({
       ...draft,
       name: draft.name.trim(),
-      project: draft.project.trim(),
+      project: primary?.project ?? '',
+      publishModule: primary?.publishModule ?? '',
+      projects: draft.projects.map((p) => ({
+        project: p.project.trim(),
+        publishModule: p.publishModule.trim(),
+      })),
       branch: draft.branch.trim(),
-      publishModule: draft.publishModule.trim(),
       remark: draft.remark.trim(),
     })
   }
@@ -131,19 +171,71 @@ export function RequirementFormModal({
           />
         </div>
 
-        <div>
-          <label className="label">所属项目</label>
-          <Select
-            value={draft.project || null}
-            onChange={(p) => set('project', p)}
-            options={projectOptions}
-            placeholder="从项目库选择"
-            searchable
-            clearable
-            onClear={() => set('project', '')}
-          />
+        <div className="sm:col-span-2">
+          <label className="label">
+            所属项目
+            <span className="ml-1 text-xs text-slate-400">一个需求可关联多个项目，各自指定发布方式</span>
+          </label>
+          <div className="space-y-2">
+            {draft.projects.map((ref) => {
+              const moduleBased = moduleBasedMap.get(ref.project) ?? false
+              return (
+                <div
+                  key={ref.project}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 dark:border-slate-700"
+                >
+                  <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    {ref.project}
+                  </span>
+                  {moduleBased ? (
+                    <input
+                      className="input h-8 flex-1 py-1 text-xs"
+                      placeholder="发布模块，如 make/（留空 = 全量）"
+                      value={ref.publishModule}
+                      onChange={(e) => setProjectModule(ref.project, e.target.value)}
+                    />
+                  ) : (
+                    <span className="flex-1 text-xs text-slate-400 dark:text-slate-500">
+                      全量发布
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-rose-500 dark:hover:bg-slate-800"
+                    title="移除该项目"
+                    onClick={() => removeProjectRef(ref.project)}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                    </svg>
+                  </button>
+                </div>
+              )
+            })}
+            {addingProject ? (
+              <Select
+                value={null}
+                onChange={(p) => p && addProjectRef(p)}
+                options={projectOptions}
+                placeholder="搜索并选择项目"
+                searchable
+                clearable
+                onClear={() => setAddingProject(false)}
+              />
+            ) : (
+              <button
+                type="button"
+                className="w-full rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs text-slate-500 transition hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-600 dark:text-slate-400 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
+                disabled={projectOptions.length === 0}
+                onClick={() => setAddingProject(true)}
+              >
+                + 添加项目
+                {projectOptions.length === 0 && '（项目库已全部选中，可到顶栏「项目管理」维护）'}
+              </button>
+            )}
+          </div>
           <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            选项来自「项目管理」，可到顶栏维护
+            选项来自「项目管理」，可到顶栏维护；项目是否支持分模块发布也在那里配置
           </p>
         </div>
 
@@ -158,19 +250,6 @@ export function RequirementFormModal({
           <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
             新建时自动填入 <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">feature/&lt;今日&gt;/REQ-</code>，可继续修改
           </p>
-        </div>
-
-        <div>
-          <label className="label">
-            发布模块
-            <span className="ml-1 text-xs text-slate-400">支持分模块发布，如 make/、admin/</span>
-          </label>
-          <input
-            className="input"
-            placeholder="如：make 或 make/"
-            value={draft.publishModule}
-            onChange={(e) => set('publishModule', e.target.value)}
-          />
         </div>
 
         <div>

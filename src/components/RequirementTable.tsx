@@ -4,7 +4,11 @@ import type { Requirement, RequirementStatus } from '../types'
 import { STATUS_FLOW, statusMeta } from '../types'
 import { copyToClipboard, exportCsv, fmtDate, fmtDateShort, isDateToday } from '../lib/utils'
 import { highlight } from '../lib/highlight'
-import { extractProjectNames } from '../lib/projects'
+import {
+  requirementModuleDisplay,
+  requirementProjectDisplay,
+  requirementProjectNames,
+} from '../lib/projects'
 import { useStore } from '../store/StoreContext'
 import { ConfirmDialog, EmptyState, SkeletonRows } from './ui'
 import { Select, statusSelectOptions } from './Select'
@@ -239,12 +243,18 @@ export function RequirementTable({
         // 默认「全部」视图隐藏已归档：通过「更多 → 已归档」专门查看
         return false
       }
-      // 历史数据可能是多项目（逗号/分号分隔），按拆分匹配
-      if (projectFilter !== 'all' && !extractProjectNames(r.project).includes(projectFilter)) {
+      // 多项目需求：任一项目命中即匹配（含旧版逗号分隔数据）
+      if (projectFilter !== 'all' && !requirementProjectNames(r).includes(projectFilter)) {
         return false
       }
       if (kw) {
-        const haystack = [r.name, r.branch, r.project, r.publishModule, r.remark]
+        const haystack = [
+          r.name,
+          r.branch,
+          requirementProjectDisplay(r),
+          requirementModuleDisplay(r),
+          r.remark,
+        ]
           .join(' ')
           .toLowerCase()
         if (!haystack.includes(kw)) return false
@@ -328,7 +338,7 @@ export function RequirementTable({
       `需求清单_${new Date().toISOString().slice(0, 10)}.csv`,
       ['需求名称', '项目', '分支', '发布模块', '状态', '创建时间', '开发开始', '开发结束', '提测时间', '上线时间', '备注'],
       items.map((r) => [
-        r.name, r.project, r.branch, r.publishModule,
+        r.name, requirementProjectDisplay(r), r.branch, requirementModuleDisplay(r),
         statusMeta(r.status).label,
         fmtDate(r.createdAt), fmtDate(r.devStartTime), fmtDate(r.devEndTime),
         fmtDate(r.testTime), fmtDate(r.publishTime), r.remark,
@@ -716,11 +726,20 @@ export function RequirementTable({
                         )}
                       </td>
                       <td className="min-w-[240px] px-4 py-3">
-                        <div
-                          className="max-w-[240px] truncate text-slate-700 dark:text-slate-300"
-                          title={r.project || undefined}
-                        >
-                          {highlight(r.project || '—', keyword)}
+                        <div className="flex max-w-[240px] flex-wrap items-center gap-1">
+                          {requirementProjectNames(r).length > 0 ? (
+                            requirementProjectNames(r).map((name) => (
+                              <span
+                                key={name}
+                                className="max-w-[240px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                title={name}
+                              >
+                                {highlight(name, keyword)}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </div>
                         <code
                           onClick={() => copyWithFeedback(r.branch, setCopiedBranch)}
@@ -735,17 +754,17 @@ export function RequirementTable({
                         </code>
                       </td>
                       <td className="px-4 py-3">
-                        {r.publishModule ? (
+                        {requirementModuleDisplay(r) ? (
                           <code
-                            onClick={() => copyWithFeedback(r.publishModule, setCopiedModule)}
+                            onClick={() => copyWithFeedback(requirementModuleDisplay(r), setCopiedModule)}
                             className={`inline-block max-w-[200px] cursor-pointer truncate rounded px-1.5 py-0.5 text-xs font-medium transition ${
-                              copiedModule === r.publishModule
+                              copiedModule === requirementModuleDisplay(r)
                                 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
                                 : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-400 dark:hover:bg-indigo-500/25'
                             }`}
-                            title={r.publishModule ? '点击复制发布模块' : undefined}
+                            title="点击复制发布模块"
                           >
-                            {copiedModule === r.publishModule ? '✓ 已复制' : highlight(r.publishModule, keyword)}
+                            {copiedModule === requirementModuleDisplay(r) ? '✓ 已复制' : highlight(requirementModuleDisplay(r), keyword)}
                           </code>
                         ) : (
                           <span className="text-slate-300 dark:text-slate-600">—</span>
@@ -1003,9 +1022,9 @@ function RequirementCard({
 
       {/* 项目 / 分支 / 模块 */}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        {r.project && (
+        {requirementProjectDisplay(r) && (
           <span className="min-w-0 max-w-full truncate text-slate-500 dark:text-slate-400">
-            {highlight(r.project, keyword)}
+            {highlight(requirementProjectDisplay(r), keyword)}
           </span>
         )}
         {r.branch && (
@@ -1021,17 +1040,17 @@ function RequirementCard({
             {copiedBranch === r.branch ? '✓ 已复制' : highlight(r.branch, keyword)}
           </code>
         )}
-        {r.publishModule && (
+        {requirementModuleDisplay(r) && (
           <code
-            onClick={() => onCopyModule(r.publishModule)}
+            onClick={() => onCopyModule(requirementModuleDisplay(r))}
             className={`min-w-0 max-w-full cursor-pointer truncate rounded px-1.5 py-0.5 font-medium transition ${
-              copiedModule === r.publishModule
+              copiedModule === requirementModuleDisplay(r)
                 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
                 : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400'
             }`}
             title="点击复制发布模块"
           >
-            {copiedModule === r.publishModule ? '✓ 已复制' : highlight(r.publishModule, keyword)}
+            {copiedModule === requirementModuleDisplay(r) ? '✓ 已复制' : highlight(requirementModuleDisplay(r), keyword)}
           </code>
         )}
       </div>

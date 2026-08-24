@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../store/StoreContext'
-import { extractProjectNames } from '../lib/projects'
+import { requirementProjectNames } from '../lib/projects'
 import { ConfirmDialog, EmptyState, Modal } from './ui'
 
 /**
@@ -18,9 +18,11 @@ export function ProjectManagerModal({
 
   // 新增
   const [newName, setNewName] = useState('')
+  const [newModuleBased, setNewModuleBased] = useState(false)
   // 行内编辑中的项目 id（null 表示未编辑）
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editModuleBased, setEditModuleBased] = useState(false)
   // 删除确认
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
   // 操作反馈
@@ -30,7 +32,7 @@ export function ProjectManagerModal({
   const usageCount = useMemo(() => {
     const map = new Map<string, number>()
     for (const r of requirements) {
-      for (const name of extractProjectNames(r.project)) {
+      for (const name of requirementProjectNames(r)) {
         map.set(name, (map.get(name) ?? 0) + 1)
       }
     }
@@ -43,9 +45,10 @@ export function ProjectManagerModal({
   }
 
   const handleAdd = () => {
-    const ok = addProject(newName)
+    const ok = addProject(newName, newModuleBased)
     if (ok) {
       setNewName('')
+      setNewModuleBased(false)
       flash(`已添加项目「${newName.trim()}」`)
     } else {
       flash('添加失败：项目名为空或已存在')
@@ -54,19 +57,20 @@ export function ProjectManagerModal({
 
   const handleSaveEdit = () => {
     if (!editingId) return
-    const ok = updateProject(editingId, editName)
+    const ok = updateProject(editingId, editName, editModuleBased)
     if (ok) {
       setEditingId(null)
       setEditName('')
-      flash('项目已重命名')
+      flash('项目已更新')
     } else {
-      flash('重命名失败：项目名为空或与其他项目重复')
+      flash('保存失败：项目名为空或与其他项目重复')
     }
   }
 
-  const startEdit = (id: string, name: string) => {
+  const startEdit = (id: string, name: string, moduleBased: boolean) => {
     setEditingId(id)
     setEditName(name)
+    setEditModuleBased(moduleBased)
   }
 
   const confirmDelete = () => {
@@ -90,7 +94,7 @@ export function ProjectManagerModal({
         )}
 
         {/* 新增 */}
-        <div className="mb-4 flex gap-2">
+        <div className="mb-3 flex gap-2">
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -104,6 +108,15 @@ export function ProjectManagerModal({
             添加
           </button>
         </div>
+        <label className="mb-4 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <input
+            type="checkbox"
+            checked={newModuleBased}
+            onChange={(e) => setNewModuleBased(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          支持分模块发布（需求表单中可为该项目单独填写发布模块，如 make/、admin/）
+        </label>
 
         {/* 列表 */}
         {projects.length === 0 ? (
@@ -117,19 +130,30 @@ export function ProjectManagerModal({
                 <li key={p.id} className="flex items-center gap-3 py-2.5">
                   {editing ? (
                     <>
-                      <input
-                        autoFocus
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEdit()
-                          if (e.key === 'Escape') {
-                            setEditingId(null)
-                            setEditName('')
-                          }
-                        }}
-                        className="input flex-1"
-                      />
+                      <div className="flex-1 space-y-2">
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEdit()
+                            if (e.key === 'Escape') {
+                              setEditingId(null)
+                              setEditName('')
+                            }
+                          }}
+                          className="input"
+                        />
+                        <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                          <input
+                            type="checkbox"
+                            checked={editModuleBased}
+                            onChange={(e) => setEditModuleBased(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          支持分模块发布
+                        </label>
+                      </div>
                       <button className="btn-primary" onClick={handleSaveEdit}>
                         保存
                       </button>
@@ -146,8 +170,15 @@ export function ProjectManagerModal({
                   ) : (
                     <>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
-                          {p.name}
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                            {p.name}
+                          </span>
+                          {p.moduleBased && (
+                            <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">
+                              分模块
+                            </span>
+                          )}
                         </div>
                         <div className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
                           关联需求 {count} 条
@@ -155,7 +186,7 @@ export function ProjectManagerModal({
                       </div>
                       <button
                         className="btn-ghost px-2 py-1 text-xs"
-                        onClick={() => startEdit(p.id, p.name)}
+                        onClick={() => startEdit(p.id, p.name, p.moduleBased ?? false)}
                       >
                         编辑
                       </button>

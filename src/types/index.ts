@@ -8,17 +8,32 @@ export type RequirementStatus =
   | 'published' // 已上线
   | 'archived' // 已归档
 
+/** 需求-项目关联：一个需求可涉及多个项目，每个项目各自的发布模块 */
+export interface RequirementProject {
+  /** 项目名（对应项目库 Project.name） */
+  project: string
+  /** 发布模块：支持分模块发布的项目可填（如 make/、admin/），空 = 全量发布 */
+  publishModule: string
+}
+
 /** 需求实体 */
 export interface Requirement {
   id: string
   /** 需求名称 */
   name: string
-  /** 所属项目（如 febase） */
+  /**
+   * 所属项目（兼容字段）：恒等于 projects[0]?.project ?? ''。
+   * 历史数据可能是逗号分隔多项目文本，加载时由 normalizeRequirement 拆入 projects。
+   */
   project: string
+  /**
+   * 发布模块（兼容字段）：恒等于 projects[0]?.publishModule ?? ''。
+   */
+  publishModule: string
+  /** 所属项目（结构化多值） */
+  projects: RequirementProject[]
   /** 代码分支 */
   branch: string
-  /** 发布模块：支持分模块发布，如 make/、admin/ 等路径 */
-  publishModule: string
   /** 当前状态 */
   status: RequirementStatus
   /** 创建时间 */
@@ -54,6 +69,8 @@ export interface Project {
   id: string
   /** 规范项目名，如 icare-zfl-febase */
   name: string
+  /** 是否支持分模块发布（如 make/、admin/ 等路径发布）；旧数据缺字段视为 false */
+  moduleBased?: boolean
   /** 创建时间 yyyy-MM-dd */
   createdAt: string
   /** 最后更新时间（同步用，缺字段视为 createdAt） */

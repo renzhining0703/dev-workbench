@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Project, Requirement, TodoItem } from '../types'
+import { normalizeRequirement } from '../lib/projects'
 import {
   loadProjects,
   loadRequirements,
@@ -46,8 +47,8 @@ interface Store {
   toggleTodo: (id: string) => void
   removeTodo: (id: string) => void
   /** 项目库维护（名称去重），返回是否成功 */
-  addProject: (name: string) => boolean
-  updateProject: (id: string, name: string) => boolean
+  addProject: (name: string, moduleBased?: boolean) => boolean
+  updateProject: (id: string, name: string, moduleBased?: boolean) => boolean
   removeProject: (id: string) => void
   /** 首次启动写入种子项目，返回是否执行了写入 */
   initProjects: (seed: string[]) => boolean
@@ -98,7 +99,7 @@ export function StoreProvider({
   pushTrigger?: PushTrigger
 }) {
   const [requirements, setRequirements] = useState<Requirement[]>(() =>
-    loadRequirements(),
+    loadRequirements().map(normalizeRequirement),
   )
   const [todos, setTodos] = useState<TodoItem[]>(() => loadTodos())
   const [projects, setProjects] = useState<Project[]>(() => loadProjects())
@@ -113,7 +114,8 @@ export function StoreProvider({
   // 跨标签页同步（同 origin 内有效）
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'dev-workbench:requirements') setRequirements(loadRequirements())
+      if (e.key === 'dev-workbench:requirements')
+        setRequirements(loadRequirements().map(normalizeRequirement))
       if (e.key === 'dev-workbench:todos') setTodos(loadTodos())
       if (e.key === 'dev-workbench:projects') setProjects(loadProjects())
       if (e.key === 'dev-workbench:auto-archive-months') {
@@ -179,10 +181,12 @@ export function StoreProvider({
       const existing = new Set(requirements.map((r) => r.id))
       const fresh = items.filter((it) => !existing.has(it.id))
       if (fresh.length === 0) return 0
-      const stamped = fresh.map((it) => ({
-        ...it,
-        updatedAt: it.updatedAt ?? it.createdAt ?? nowISO(),
-      })) as Requirement[]
+      const stamped = fresh
+        .map((it) => ({
+          ...it,
+          updatedAt: it.updatedAt ?? it.createdAt ?? nowISO(),
+        }))
+        .map(normalizeRequirement) as Requirement[]
       const next = [...stamped, ...requirements]
       saveRequirements(next)
       setRequirements(next)
@@ -234,13 +238,15 @@ export function StoreProvider({
   const normalizeName = (name: string) => name.trim()
 
   const addProject = useCallback(
-    (name: string): boolean => {
+    (name: string, moduleBased?: boolean): boolean => {
       const n = normalizeName(name)
       if (!n) return false
       if (projects.some((p) => p.name.toLowerCase() === n.toLowerCase())) return false
       const t = nowISO()
-      const next = [...projects, { id: uid(), name: n, createdAt: t, updatedAt: t }]
-        .sort((a, b) => a.name.localeCompare(b.name))
+      const next = [
+        ...projects,
+        { id: uid(), name: n, moduleBased: !!moduleBased, createdAt: t, updatedAt: t },
+      ].sort((a, b) => a.name.localeCompare(b.name))
       saveProjects(next)
       setProjects(next)
       triggerRef.current()
@@ -250,12 +256,16 @@ export function StoreProvider({
   )
 
   const updateProject = useCallback(
-    (id: string, name: string): boolean => {
+    (id: string, name: string, moduleBased?: boolean): boolean => {
       const n = normalizeName(name)
       if (!n) return false
       if (projects.some((p) => p.id !== id && p.name.toLowerCase() === n.toLowerCase())) return false
       const next = projects
-        .map((p) => (p.id === id ? { ...p, name: n, updatedAt: nowISO() } : p))
+        .map((p) =>
+          p.id === id
+            ? { ...p, name: n, moduleBased: moduleBased ?? p.moduleBased ?? false, updatedAt: nowISO() }
+            : p,
+        )
         .sort((a, b) => a.name.localeCompare(b.name))
       saveProjects(next)
       setProjects(next)
@@ -301,8 +311,10 @@ export function StoreProvider({
       const todos = Array.isArray(data.todos) ? data.todos : []
       const projs = Array.isArray(data.projects) ? data.projects : []
       const t = nowISO()
-      // 给旧数据补 updatedAt（合并降级用）
-      const stampedReqs = reqs.map((r) => ({ ...r, updatedAt: r.updatedAt ?? r.createdAt ?? t }))
+      // 给旧数据补 updatedAt（合并降级用），并规范化为多项目结构
+      const stampedReqs = reqs
+        .map((r) => ({ ...r, updatedAt: r.updatedAt ?? r.createdAt ?? t }))
+        .map(normalizeRequirement)
       const stampedTodos = todos.map((x) => ({
         ...x,
         updatedAt: (x as TodoItem).updatedAt ?? (x as TodoItem).createdAt ?? t,
@@ -346,7 +358,11 @@ export function StoreProvider({
       projects: Project[]
       settings?: { autoArchiveMonths?: number }
     }) => {
-      const mergedReqs = mergeByUpdatedAt(snap.requirements, requirements)
+      // 云端数据统一规范化（旧快照可能缺 projects 字段）
+      const mergedReqs = mergeByUpdatedAt(
+        snap.requirements.map(normalizeRequirement),
+        requirements,
+      )
       const mergedTodos = mergeByUpdatedAt(snap.todos, todos)
       const mergedProjects = mergeByUpdatedAt(snap.projects, projects)
       saveRequirements(mergedReqs)

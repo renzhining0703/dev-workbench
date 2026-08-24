@@ -3,6 +3,7 @@ import { addMonths, format, parse } from 'date-fns'
 import type { Requirement } from '../types'
 import { statusMeta } from '../types'
 import { copyToClipboard, exportCsv, fmtDate } from '../lib/utils'
+import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
 import { Modal } from './ui'
 
 /** 按"开发开始时间"落在指定月份筛选 */
@@ -62,9 +63,9 @@ export function ExportModal({
       ],
       list.map((r) => [
         r.name,
-        r.project,
+        requirementProjectDisplay(r),
         r.branch,
-        r.publishModule,
+        requirementModuleDisplay(r),
         statusMeta(r.status).label,
         fmtDate(r.createdAt),
         fmtDate(r.devStartTime),

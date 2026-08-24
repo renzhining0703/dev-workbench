@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Requirement, RequirementStatus } from '../types'
 import { STATUS_FLOW, statusMeta } from '../types'
 import { fmtDate, isDateToday, copyToClipboard } from '../lib/utils'
+import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
 import { Select, statusSelectOptions } from './Select'
 
 interface Props {
@@ -95,7 +96,7 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
 
           {/* 关键字段 */}
           <div className="space-y-3">
-            <DrawerField label="所属项目" value={r.project} />
+            <DrawerField label="所属项目" value={requirementProjectDisplay(r)} />
             <DrawerField
               label="代码分支"
               value={r.branch}
@@ -105,10 +106,10 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
             />
             <DrawerField
               label="发布模块"
-              value={r.publishModule}
+              value={requirementModuleDisplay(r)}
               copyable
               copied={copiedField === 'module'}
-              onCopy={() => copyField('module', r.publishModule)}
+              onCopy={() => copyField('module', requirementModuleDisplay(r))}
             />
           </div>
 

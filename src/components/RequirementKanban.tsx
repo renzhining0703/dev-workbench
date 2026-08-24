@@ -3,6 +3,7 @@ import type { DragEvent } from 'react'
 import type { Requirement, RequirementStatus } from '../types'
 import { statusMeta } from '../types'
 import { fmtDateShort } from '../lib/utils'
+import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
 
 /**
  * 看板包含的 4 列：只展示工作流高频状态
@@ -57,7 +58,13 @@ export function RequirementKanban({
     for (const col of KANBAN_COLUMNS) map.set(col, [])
     for (const r of inKanban) {
       if (kw) {
-        const haystack = [r.name, r.branch, r.project, r.publishModule, r.remark]
+        const haystack = [
+          r.name,
+          r.branch,
+          requirementProjectDisplay(r),
+          requirementModuleDisplay(r),
+          r.remark,
+        ]
           .join(' ')
           .toLowerCase()
         if (!haystack.includes(kw)) continue
@@ -239,12 +246,12 @@ function KanbanCard({
       <div className="line-clamp-2 text-sm font-medium leading-snug text-slate-800 dark:text-slate-100">
         {r.name}
       </div>
-      {r.project && (
+      {requirementProjectDisplay(r) && (
         <div
           className="mt-1.5 truncate text-[11px] text-slate-500 dark:text-slate-400"
-          title={r.project}
+          title={requirementProjectDisplay(r)}
         >
-          {r.project}
+          {requirementProjectDisplay(r)}
         </div>
       )}
       {r.branch && (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Requirement, TodoItem } from '../types'
 import { isDateToday, toDateStr } from '../lib/utils'
+import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
 
 /* ---------------- 今日上线提醒 ---------------- */
 
@@ -44,7 +45,7 @@ export function PublishReminder({ requirements }: { requirements: Requirement[] 
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       for (const r of dueList) {
         new Notification(`🔔 ${r.name} 今日上线`, {
-          body: `${r.project ? r.project + ' / ' : ''}${r.publishModule ? '发布模块 ' + r.publishModule : '全量发布'}`,
+          body: `${requirementProjectDisplay(r) ? requirementProjectDisplay(r) + ' / ' : ''}${requirementModuleDisplay(r) ? '发布模块 ' + requirementModuleDisplay(r) : '全量发布'}`,
           tag: `publish-${r.id}-${today}`,
         })
       }
@@ -69,9 +70,9 @@ export function PublishReminder({ requirements }: { requirements: Requirement[] 
           {dueList.map((r) => (
             <li key={r.id} className="text-sm text-rose-600 dark:text-rose-400">
               「{r.name}」今日上线
-              {r.publishModule && (
+              {requirementModuleDisplay(r) && (
                 <span className="ml-1.5 rounded bg-rose-100 px-1.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
-                  发布模块：{r.publishModule}
+                  发布模块：{requirementModuleDisplay(r)}
                 </span>
               )}
             </li>
@@ -137,20 +138,20 @@ export function TodoPanel({
           title="今日开始开发"
           icon="code"
           color="blue"
-          items={todayTasks.dev.map((r) => ({ id: r.id, name: r.name, project: r.project }))}
+          items={todayTasks.dev.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
         />
         <TaskCard
           title="今日待提测"
           icon="flask"
           color="amber"
-          items={todayTasks.test.map((r) => ({ id: r.id, name: r.name, project: r.project }))}
+          items={todayTasks.test.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
         />
         <TaskCard
           title="今日上线"
           icon="rocket"
           color="rose"
-          items={todayTasks.publish.map((r) => ({ id: r.id, name: r.name, project: r.project }))}
-          doneItems={todayTasks.publishDone.map((r) => ({ id: r.id, name: r.name, project: r.project }))}
+          items={todayTasks.publish.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
+          doneItems={todayTasks.publishDone.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
         />
       </div>
 
