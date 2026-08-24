@@ -50,6 +50,11 @@ export class SessionStore {
     return this._deleteByHash.run(hashToken(token)).changes > 0
   }
 
+  /** 吊销该用户全部会话（重置密码后作废旧登录态）；返回删除行数 */
+  revokeAllForUser(username) {
+    return this._deleteForUser.run(username).changes
+  }
+
   /** 直接写入已知 token 的会话行（迁移旧 users.json 的 tokenHex 时用） */
   importToken(username, tokenHex) {
     this._insert.run(hashToken(tokenHex), username, new Date().toISOString())

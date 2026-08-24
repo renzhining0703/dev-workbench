@@ -1,11 +1,21 @@
 /**
- * 认证路由：POST /register /login /logout, GET /me
+ * 认证路由：POST /register /login /logout /change-password /reset-password,
+ * GET /me /config
  *
  * 安全语义自 v1 authRoutes.mjs 逐条平移：
  *   - 登录/注册失败一律 401 'invalid credentials'，不区分具体原因（防枚举）
  *   - 用户名不存在时 scrypt 仍跑（dummy hash 保持时长一致）
  *   - 密码比较 timingSafeEqual；token 32 字节随机 hex；登录即轮换（单会话互踢）
- *   - register / login 走 express-rate-limit（按 IP，经 nginx 反代由 trust proxy 还原）
+ *   - register / login / reset-password 走 express-rate-limit（按 IP，经 nginx 反代由 trust proxy 还原）
+ *
+ * v2 新增（完整认证流程）：
+ *   - GET  /config           注册页探测：服务端是否要求邀请码（无敏感信息）
+ *   - POST /change-password  登录态修改密码（需验证旧密码）
+ *   - POST /reset-password   忘记密码：用户名 + 邀请码 + 新密码。
+ *                            个人服务无邮件通道，邀请码即身份凭证；
+ *                            服务端未配置 INVITE_CODE 时该通道关闭（403 reset disabled）——
+ *                            否则任何人都可重置任何账号。
+ *   - 重置密码成功后吊销该用户全部会话（旧登录态全部失效）
  */
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
@@ -120,6 +130,73 @@ export function createAuthRouter({
       ok: true,
       data: { user: { username: req.user.username } },
     })
+  })
+
+  /** GET /api/auth/config：注册页探测邀请码是否必填（无敏感信息，不限流） */
+  router.get('/config', (_req, res) => {
+    res.status(200).json({
+      ok: true,
+      data: { inviteRequired: inviteCode.length > 0 },
+    })
+  })
+
+  /**
+   * POST /api/auth/change-password：登录态修改密码
+   * body: { currentPassword, newPassword }
+   */
+  router.post('/change-password', authLimiter, requireAuth, (req, res) => {
+    const { currentPassword, newPassword } = req.body ?? {}
+    if (
+      typeof currentPassword !== 'string' ||
+      typeof newPassword !== 'string' ||
+      newPassword.length < 8
+    ) {
+      return res.status(400).json({ ok: false, error: 'invalid input' })
+    }
+
+    const u = userStore.get(req.user.username)
+    if (!u || !safeEqualHex(hashPassword(currentPassword, u.saltHex), u.pwHashHex)) {
+      return res.status(401).json({ ok: false, error: 'invalid credentials' })
+    }
+
+    const saltHex = genSalt()
+    userStore.setPassword(u.username, hashPassword(newPassword, saltHex), saltHex)
+    // 当前会话保持有效；其他会话按单会话模型本就不存在
+    return res.status(204).end()
+  })
+
+  /**
+   * POST /api/auth/reset-password：忘记密码重置
+   * body: { username, inviteCode, newPassword }
+   * 防枚举：邀请码错 / 用户不存在 / 新密码不合法 一律 401 同文案
+   */
+  router.post('/reset-password', authLimiter, (req, res) => {
+    const { username, inviteCode: given, newPassword } = req.body ?? {}
+
+    // 未配置邀请码 → 重置通道整体关闭
+    if (inviteCode.length === 0) {
+      return res.status(403).json({ ok: false, error: 'reset disabled' })
+    }
+
+    if (
+      !isValidUsername(username) ||
+      given !== inviteCode ||
+      typeof newPassword !== 'string' ||
+      newPassword.length < 8
+    ) {
+      return res.status(401).json({ ok: false, error: 'invalid credentials' })
+    }
+
+    const u = userStore.get(username)
+    if (!u) {
+      return res.status(401).json({ ok: false, error: 'invalid credentials' })
+    }
+
+    const saltHex = genSalt()
+    userStore.setPassword(username, hashPassword(newPassword, saltHex), saltHex)
+    // 重置后吊销全部旧会话
+    sessionStore.revokeAllForUser(username)
+    return res.status(204).end()
   })
 
   return router

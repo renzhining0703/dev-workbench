@@ -1,7 +1,7 @@
 /**
  * 认证 HTTP 客户端
  *
- * 调用 /api/auth/{register,login,logout,me}
+ * 调用 /api/auth/{register,login,logout,me,config,change-password,reset-password}
  * - 401 / 其他错误抛 AuthError（含 status + message）
  * - 成功返回 AuthSession 子集
  */
@@ -83,6 +83,50 @@ export const authApi = {
     const json = await readJson(res)
     if (!json.ok || !json.data) return null
     return (json.data as { user: { username: string } }).user
+  },
+
+  /**
+   * 注册页探测：服务端是否要求邀请码。
+   * 探测失败按「不要求」处理（提交时服务端仍会校验，只是错误提示晚一步）。
+   */
+  async config(): Promise<{ inviteRequired: boolean }> {
+    try {
+      const res = await fetch(`${SYNC_API}/auth/config`, { credentials: 'omit' })
+      if (!res.ok) return { inviteRequired: false }
+      const json = await readJson(res)
+      if (!json.ok || !json.data) return { inviteRequired: false }
+      return { inviteRequired: Boolean((json.data as { inviteRequired?: boolean }).inviteRequired) }
+    } catch {
+      return { inviteRequired: false }
+    }
+  },
+
+  /** 登录态修改密码（204 成功；401 旧密码错误；429 限流） */
+  async changePassword(token: string, args: { currentPassword: string; newPassword: string }): Promise<void> {
+    const res = await fetch(`${SYNC_API}/auth/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      credentials: 'omit',
+      body: JSON.stringify(args),
+    })
+    if (res.ok) return
+    if (res.status === 429) throw new AuthError('too many attempts', 429, true)
+    const json = await readJson(res)
+    throw new AuthError(json.error ?? `http ${res.status}`, res.status)
+  },
+
+  /** 忘记密码重置（需要服务端配置邀请码；403 = 服务端未开启该通道） */
+  async resetPassword(args: { username: string; inviteCode: string; newPassword: string }): Promise<void> {
+    const res = await fetch(`${SYNC_API}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'omit',
+      body: JSON.stringify(args),
+    })
+    if (res.ok) return
+    if (res.status === 429) throw new AuthError('too many attempts', 429, true)
+    const json = await readJson(res)
+    throw new AuthError(json.error ?? `http ${res.status}`, res.status)
   },
 }
 

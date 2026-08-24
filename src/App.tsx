@@ -15,7 +15,7 @@ import { InstallPrompt } from './components/InstallPrompt'
 import { StatsView } from './components/StatsView'
 import { PreferencesModal } from './components/PreferencesModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
-import { LoginModal } from './components/LoginModal'
+import { AuthPage } from './components/AuthPage'
 import { UserMenu } from './components/UserMenu'
 import { AuthProvider, useAuth } from './store/AuthContext'
 import { findAutoArchiveTargets } from './lib/archive'
@@ -53,8 +53,9 @@ export default function App() {
 }
 
 /**
- * 拿到 auth session 后再包 StoreProvider + AppRoot；
- * AppRoot 内部根据 session 启动/暂停 sync
+ * 认证门卫 + 拿到 auth session 后再包 StoreProvider + AppRoot；
+ * AppRoot 内部根据 session 启动/暂停 sync。
+ * 未登录（且未进入本地模式）→ 渲染独立认证页 AuthPage。
  */
 function AppShell() {
   const auth = useAuth()
@@ -63,10 +64,15 @@ function AppShell() {
     syncRef.current?.schedulePush()
   }, [])
 
+  if (!auth.bootDone) return null
+
   return (
     <StoreProvider pushTrigger={pushTrigger}>
-      <AppRoot syncRef={syncRef} auth={auth} />
-      <LoginModal open={auth.loginModalOpen} />
+      {auth.session || auth.guest ? (
+        <AppRoot syncRef={syncRef} auth={auth} />
+      ) : (
+        <AuthPage />
+      )}
     </StoreProvider>
   )
 }

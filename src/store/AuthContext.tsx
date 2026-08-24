@@ -3,8 +3,10 @@
  *
  * - 启动时从 localStorage 读取已有 session（loadAuth）
  * - 调用 authApi.login/register → saveAuth → setState
- * - logout: 清 localStorage + setState(null)
- * - 提供 showLogin() 让 sync 层在 401 时打开登录弹窗
+ * - 未登录：渲染独立认证页 AuthPage（登录/注册/忘记密码）
+ *   「本地模式」（guest）可跳过登录直接进入应用，数据只存本地
+ * - 401（会话过期）：清空 session 与本地登录态，回到认证页
+ * - changePassword / resetPassword 支撑完整密码流程
  */
 import {
   createContext,
@@ -20,24 +22,31 @@ import type { AuthSession } from '../lib/auth'
 import { loadAuth, saveAuth, clearAuth } from '../lib/auth'
 import { authApi, AuthError } from '../lib/authClient'
 
-export type Mode = 'login' | 'register'
+export type Mode = 'login' | 'register' | 'forgot'
+
+const GUEST_KEY = 'dev-workbench:guest'
 
 interface AuthContextValue {
   /** 当前 session；null 表示未登录 */
   session: AuthSession | null
-  /** 启动时的初始读取是否完成（避免 modal 闪一下又关掉） */
+  /** 启动时的初始读取是否完成（避免认证页闪一下又消失） */
   bootDone: boolean
-  /** 是否显示登录弹窗（任何页面都可触发） */
-  loginModalOpen: boolean
-  /** 登录弹窗预填模式（'login' 默认；'register' 邀请码注册的入口） */
+  /** 本地模式：未登录但直接进入应用（数据不云同步） */
+  guest: boolean
+  /** 认证页初始视图（401 重连场景预填 login + 用户名） */
   loginMode: Mode
-  /** 触发打开登录弹窗 */
-  showLogin: (mode?: Mode) => void
-  hideLogin: () => void
   /** 用户名预填（401 重连场景） */
   prefillUsername: string
+  /** 从认证页进入本地模式 */
+  enterLocalMode: () => void
+  /** 从本地模式返回认证页（header「登录」按钮用） */
+  showLogin: (mode?: Mode) => void
   login: (args: { username: string; password: string; remember: boolean }) => Promise<void>
   register: (args: { username: string; password: string; inviteCode: string; remember: boolean }) => Promise<void>
+  /** 忘记密码重置；成功后由认证页切回登录视图 */
+  resetPassword: (args: { username: string; inviteCode: string; newPassword: string }) => Promise<void>
+  /** 登录态修改密码（成功后当前会话保持有效） */
+  changePassword: (args: { currentPassword: string; newPassword: string }) => Promise<void>
   logout: () => Promise<void>
   /** 通知外部（toast 之类） */
   notify: (msg: { tone: 'ok' | 'warn' | 'error'; text: string }) => void
@@ -56,7 +65,7 @@ export function useAuth(): AuthContextValue {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null)
   const [bootDone, setBootDone] = useState(false)
-  const [loginModalOpen, setLoginModalOpen] = useState(false)
+  const [guest, setGuest] = useState(false)
   const [loginMode, setLoginMode] = useState<Mode>('login')
   const [prefillUsername, setPrefillUsername] = useState('')
 
@@ -72,32 +81,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   )
 
-  // 启动时读取已存的 session
+  // 启动时读取已存的 session / 本地模式标记
   useEffect(() => {
     const existing = loadAuth()
     if (existing) setSession(existing)
+    else if (localStorage.getItem(GUEST_KEY) === '1') setGuest(true)
     setBootDone(true)
   }, [])
 
-  // 订阅一个全局 401 事件（由 sync 层 emit）；event bus 简单实现
+  // 订阅一个全局 401 事件（由 sync 层 emit）：会话过期 → 清空登录态，回到认证页
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ username?: string }>
-      const username = ce.detail?.username ?? ''
-      setPrefillUsername(username)
+      clearAuth()
+      localStorage.removeItem(GUEST_KEY)
+      setSession(null)
+      setGuest(false)
+      setPrefillUsername(ce.detail?.username ?? '')
       setLoginMode('login')
-      setLoginModalOpen(true)
       notify({ tone: 'warn', text: '会话已过期，请重新登录' })
     }
     window.addEventListener('dev-workbench:auth-401', handler)
     return () => window.removeEventListener('dev-workbench:auth-401', handler)
   }, [notify])
 
-  const showLogin = useCallback((mode: Mode = 'login') => {
-    setLoginMode(mode)
-    setLoginModalOpen(true)
+  const enterLocalMode = useCallback(() => {
+    localStorage.setItem(GUEST_KEY, '1')
+    setGuest(true)
   }, [])
-  const hideLogin = useCallback(() => setLoginModalOpen(false), [])
+
+  /** 退出本地模式 → 显示认证页 */
+  const showLogin = useCallback((mode: Mode = 'login') => {
+    localStorage.removeItem(GUEST_KEY)
+    setGuest(false)
+    setLoginMode(mode)
+  }, [])
 
   const login = useCallback(
     async (args: { username: string; password: string; remember: boolean }) => {
@@ -107,8 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password: args.password,
         })
         const full = saveAuth(data, args.remember)
+        localStorage.removeItem(GUEST_KEY)
+        setGuest(false)
         setSession(full)
-        setLoginModalOpen(false)
         notify({ tone: 'ok', text: `欢迎回来，${full.user.username}` })
       } catch (e) {
         if (e instanceof AuthError) {
@@ -131,8 +150,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           inviteCode: args.inviteCode || undefined,
         })
         const full = saveAuth(data, args.remember)
+        localStorage.removeItem(GUEST_KEY)
+        setGuest(false)
         setSession(full)
-        setLoginModalOpen(false)
         notify({ tone: 'ok', text: `账号 ${full.user.username} 已创建` })
       } catch (e) {
         if (e instanceof AuthError) {
@@ -146,9 +166,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [notify],
   )
 
+  const resetPassword = useCallback(
+    async (args: { username: string; inviteCode: string; newPassword: string }) => {
+      // 抛 AuthError 由认证页展示（403 reset disabled → 服务端未配置邀请码）
+      await authApi.resetPassword({
+        username: args.username.trim(),
+        inviteCode: args.inviteCode.trim(),
+        newPassword: args.newPassword,
+      })
+    },
+    [],
+  )
+
+  const changePassword = useCallback(
+    async (args: { currentPassword: string; newPassword: string }) => {
+      if (!session) throw new AuthError('not logged in', 401)
+      await authApi.changePassword(session.token, args)
+      notify({ tone: 'ok', text: '密码已更新' })
+    },
+    [session, notify],
+  )
+
   const logout = useCallback(async () => {
     const current = session
     setSession(null)
+    setGuest(false)
+    localStorage.removeItem(GUEST_KEY)
     clearAuth()
     if (current) {
       try {
@@ -164,18 +207,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       session,
       bootDone,
-      loginModalOpen,
+      guest,
       loginMode,
-      showLogin,
-      hideLogin,
       prefillUsername,
+      enterLocalMode,
+      showLogin,
       login,
       register,
+      resetPassword,
+      changePassword,
       logout,
       notify,
       onNotify,
     }),
-    [session, bootDone, loginModalOpen, loginMode, showLogin, hideLogin, prefillUsername, login, register, logout, notify, onNotify],
+    [session, bootDone, guest, loginMode, prefillUsername, enterLocalMode, showLogin, login, register, resetPassword, changePassword, logout, notify, onNotify],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -183,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 /**
  * 触发 401 流程（由 sync 层调用）
- * dispatch 一个 CustomEvent，AuthProvider 监听并打开登录弹窗
+ * dispatch 一个 CustomEvent，AuthProvider 监听并清空登录态回到认证页
  */
 export function emitUnauthorized(username: string) {
   window.dispatchEvent(

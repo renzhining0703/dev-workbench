@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../store/AuthContext'
 import { ConfirmDialog } from './ui'
+import { ChangePasswordModal } from './ChangePasswordModal'
 import type { SyncHandle, SyncState } from '../lib/sync'
 import { SyncBadge } from './SyncBadge'
 
 /**
  * 已登录用户菜单：
  *   - 圆形头像（首字母）
- *   - 下拉：用户名 + 立即同步 + 退出登录
+ *   - 下拉：用户名 + 立即同步 + 修改密码 + 退出登录
  *   - 嵌入 SyncBadge（同位置）
  */
 interface Props {
@@ -18,6 +19,7 @@ export function UserMenu({ sync }: Props) {
   const auth = useAuth()
   const [open, setMenuOpen] = useState(false)
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const [changePwOpen, setChangePwOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
   const [syncState, setSyncState] = useState<SyncState>(() => sync.getState())
 
@@ -88,6 +90,19 @@ export function UserMenu({ sync }: Props) {
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
               onClick={() => {
                 setMenuOpen(false)
+                setChangePwOpen(true)
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              修改密码
+            </button>
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+              onClick={() => {
+                setMenuOpen(false)
                 setConfirmLogout(true)
               }}
             >
@@ -99,6 +114,8 @@ export function UserMenu({ sync }: Props) {
           </div>
         )}
       </div>
+
+      <ChangePasswordModal open={changePwOpen} onClose={() => setChangePwOpen(false)} />
 
       <ConfirmDialog
         open={confirmLogout}
