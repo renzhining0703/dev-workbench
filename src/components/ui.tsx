@@ -56,12 +56,18 @@ export function ConfirmDialog({
   message,
   onCancel,
   onConfirm,
+  confirmLabel = '删除',
+  cancelLabel = '取消',
 }: {
   open: boolean
   title: string
   message: string
   onCancel: () => void
   onConfirm: () => void
+  /** 确认按钮文案，默认「删除」（保持原行为） */
+  confirmLabel?: string
+  /** 取消按钮文案，默认「取消」 */
+  cancelLabel?: string
 }) {
   useEffect(() => {
     if (!open) return
@@ -78,10 +84,10 @@ export function ConfirmDialog({
     >
       <div className="card w-full max-w-sm p-6">
         <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{message}</p>
+        <p className="mt-2 whitespace-pre-line text-sm text-slate-500 dark:text-slate-400">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onCancel}>取消</button>
-          <button className="btn-danger" onClick={onConfirm}>删除</button>
+          <button className="btn-ghost" onClick={onCancel}>{cancelLabel}</button>
+          <button className="btn-danger" onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>

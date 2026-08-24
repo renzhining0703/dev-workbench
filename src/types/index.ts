@@ -45,6 +45,8 @@ export interface TodoItem {
   date: string
   done: boolean
   createdAt: string
+  /** 最后更新时间（同步用，缺字段视为 createdAt） */
+  updatedAt?: string
 }
 
 /** 项目（下拉选项数据源，独立维护） */
@@ -54,6 +56,8 @@ export interface Project {
   name: string
   /** 创建时间 yyyy-MM-dd */
   createdAt: string
+  /** 最后更新时间（同步用，缺字段视为 createdAt） */
+  updatedAt?: string
 }
 
 export const STATUS_META: Record<

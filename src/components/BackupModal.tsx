@@ -150,9 +150,10 @@ export function BackupModal({ open, onClose, onRestore, counts }: Props) {
         title="确认恢复数据"
         message={
           restorePreview
-            ? `备份包含 ${restorePreview.requirements.length} 条需求、${restorePreview.todos.length} 条待办、${restorePreview.projects.length} 个项目。恢复后将覆盖当前全部数据，确定继续吗？`
+            ? `备份包含 ${restorePreview.requirements.length} 条需求、${restorePreview.todos.length} 条待办、${restorePreview.projects.length} 个项目。\n\n恢复后会覆盖当前全部数据，并同步覆盖云端——所有设备下次刷新时也会变成这份备份的内容。\n\n确定继续吗？`
             : ''
         }
+        confirmLabel="覆盖云端"
         onCancel={() => setRestorePreview(null)}
         onConfirm={confirmRestore}
       />

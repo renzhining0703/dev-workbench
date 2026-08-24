@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -19,12 +20,21 @@ import {
   nowISO,
   type BackupData,
 } from '../lib/storage'
+import { getArchiveMonths, setArchiveMonths as persistArchiveMonths } from '../lib/archive'
 import type { MigratedRequirement } from '../lib/migrate'
+import { mergeByUpdatedAt } from '../lib/sync'
+
+/** 同步触发器：由外部（App 层 startSync）注入；mutation 后调用 */
+export type PushTrigger = () => void
+
+const noopPush: PushTrigger = () => {}
 
 interface Store {
   requirements: Requirement[]
   todos: TodoItem[]
   projects: Project[]
+  /** 自动归档月份（同步通道） */
+  archiveMonths: number
   addRequirement: (draft: Omit<Requirement, 'id' | 'createdAt' | 'updatedAt'>) => void
   updateRequirement: (draft: Requirement) => void
   removeRequirement: (id: string) => void
@@ -43,23 +53,72 @@ interface Store {
   initProjects: (seed: string[]) => boolean
   /** 从备份恢复全部数据（覆盖现有），返回是否成功 */
   restoreAll: (data: BackupData) => boolean
+  /**
+   * 清空全部本地数据 + localStorage（不触发 push）
+   * 切换用户 / 登出时调用
+   */
+  clearAll: () => void
+  /** 修改自动归档月份（走同步通道） */
+  setArchiveMonths: (months: number) => void
+  /**
+   * 用服务端合并结果覆盖本地（由 sync 层调用）
+   * 同时写 localStorage。不触发自身 push（避免循环）。
+   */
+  applyRemote: (snap: {
+    requirements: Requirement[]
+    todos: TodoItem[]
+    projects: Project[]
+    settings?: { autoArchiveMonths?: number }
+  }) => void
 }
 
 const StoreContext = createContext<Store | null>(null)
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+/**
+ * 提供同步触发器的容器（不消费 store 本身，避免循环）
+ * 在 StoreProvider 外层使用，注入 push trigger 给 store
+ */
+const PushTriggerContext = createContext<PushTrigger>(noopPush)
+export function usePushTrigger(): PushTrigger {
+  return useContext(PushTriggerContext)
+}
+
+/** 把日期 clamp 到合法区间（1-12），与 archive.ts 保持一致 */
+function clampMonths(n: number): number {
+  if (Number.isNaN(n)) return 3
+  return Math.max(1, Math.min(12, Math.floor(n)))
+}
+
+export function StoreProvider({
+  children,
+  pushTrigger,
+}: {
+  children: ReactNode
+  /** 由外层 startSync 注入；未注入时为 noop（不推服务端） */
+  pushTrigger?: PushTrigger
+}) {
   const [requirements, setRequirements] = useState<Requirement[]>(() =>
     loadRequirements(),
   )
   const [todos, setTodos] = useState<TodoItem[]>(() => loadTodos())
   const [projects, setProjects] = useState<Project[]>(() => loadProjects())
+  const [archiveMonths, setArchiveMonthsState] = useState<number>(() =>
+    getArchiveMonths(),
+  )
 
-  // 跨标签页同步
+  const trigger = pushTrigger ?? noopPush
+  const triggerRef = useRef(trigger)
+  triggerRef.current = trigger
+
+  // 跨标签页同步（同 origin 内有效）
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'dev-workbench:requirements') setRequirements(loadRequirements())
       if (e.key === 'dev-workbench:todos') setTodos(loadTodos())
       if (e.key === 'dev-workbench:projects') setProjects(loadProjects())
+      if (e.key === 'dev-workbench:auto-archive-months') {
+        setArchiveMonthsState(getArchiveMonths())
+      }
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
@@ -76,6 +135,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         const next = [item, ...prev]
         saveRequirements(next)
+        triggerRef.current()
         return next
       })
     },
@@ -88,6 +148,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         r.id === draft.id ? { ...draft, updatedAt: nowISO() } : r,
       )
       saveRequirements(next)
+      triggerRef.current()
       return next
     })
   }, [])
@@ -96,6 +157,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setRequirements((prev) => {
       const next = prev.filter((r) => r.id !== id)
       saveRequirements(next)
+      triggerRef.current()
       return next
     })
   }, [])
@@ -106,6 +168,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (prev.some((r) => r.id === item.id)) return prev
       const next = [item, ...prev]
       saveRequirements(next)
+      triggerRef.current()
       return next
     })
   }, [])
@@ -116,9 +179,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const existing = new Set(requirements.map((r) => r.id))
       const fresh = items.filter((it) => !existing.has(it.id))
       if (fresh.length === 0) return 0
-      const next = [...(fresh as Requirement[]), ...requirements]
+      const stamped = fresh.map((it) => ({
+        ...it,
+        updatedAt: it.updatedAt ?? it.createdAt ?? nowISO(),
+      })) as Requirement[]
+      const next = [...stamped, ...requirements]
       saveRequirements(next)
       setRequirements(next)
+      triggerRef.current()
       return fresh.length
     },
     [requirements],
@@ -126,23 +194,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addTodo = useCallback((content: string, date: string) => {
     setTodos((prev) => {
+      const t = nowISO()
       const item: TodoItem = {
         id: uid(),
         content,
         date,
         done: false,
-        createdAt: nowISO(),
+        createdAt: t,
+        updatedAt: t,
       }
       const next = [item, ...prev]
       saveTodos(next)
+      triggerRef.current()
       return next
     })
   }, [])
 
   const toggleTodo = useCallback((id: string) => {
     setTodos((prev) => {
-      const next = prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
+      const next = prev.map((t) =>
+        t.id === id ? { ...t, done: !t.done, updatedAt: nowISO() } : t,
+      )
       saveTodos(next)
+      triggerRef.current()
       return next
     })
   }, [])
@@ -151,6 +225,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTodos((prev) => {
       const next = prev.filter((t) => t.id !== id)
       saveTodos(next)
+      triggerRef.current()
       return next
     })
   }, [])
@@ -163,11 +238,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const n = normalizeName(name)
       if (!n) return false
       if (projects.some((p) => p.name.toLowerCase() === n.toLowerCase())) return false
-      const next = [...projects, { id: uid(), name: n, createdAt: nowISO() }].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      )
+      const t = nowISO()
+      const next = [...projects, { id: uid(), name: n, createdAt: t, updatedAt: t }]
+        .sort((a, b) => a.name.localeCompare(b.name))
       saveProjects(next)
       setProjects(next)
+      triggerRef.current()
       return true
     },
     [projects],
@@ -179,10 +255,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!n) return false
       if (projects.some((p) => p.id !== id && p.name.toLowerCase() === n.toLowerCase())) return false
       const next = projects
-        .map((p) => (p.id === id ? { ...p, name: n } : p))
+        .map((p) => (p.id === id ? { ...p, name: n, updatedAt: nowISO() } : p))
         .sort((a, b) => a.name.localeCompare(b.name))
       saveProjects(next)
       setProjects(next)
+      triggerRef.current()
       return true
     },
     [projects],
@@ -192,6 +269,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setProjects((prev) => {
       const next = prev.filter((p) => p.id !== id)
       saveProjects(next)
+      triggerRef.current()
       return next
     })
   }, [])
@@ -200,13 +278,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const initProjects = useCallback(
     (seed: string[]): boolean => {
       if (projects.length > 0) return false
+      const t = nowISO()
       const next: Project[] = seed.map((name) => ({
         id: uid(),
         name,
-        createdAt: nowISO(),
+        createdAt: t,
+        updatedAt: t,
       }))
       saveProjects(next)
       setProjects(next)
+      triggerRef.current()
       return true
     },
     [projects.length],
@@ -219,22 +300,91 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const reqs = data.requirements
       const todos = Array.isArray(data.todos) ? data.todos : []
       const projs = Array.isArray(data.projects) ? data.projects : []
-      saveRequirements(reqs)
-      saveTodos(todos)
-      saveProjects(projs)
-      setRequirements(reqs)
-      setTodos(todos)
-      setProjects(projs)
+      const t = nowISO()
+      // 给旧数据补 updatedAt（合并降级用）
+      const stampedReqs = reqs.map((r) => ({ ...r, updatedAt: r.updatedAt ?? r.createdAt ?? t }))
+      const stampedTodos = todos.map((x) => ({
+        ...x,
+        updatedAt: (x as TodoItem).updatedAt ?? (x as TodoItem).createdAt ?? t,
+      }))
+      const stampedProjs = projs.map((p) => ({
+        ...p,
+        updatedAt: (p as Project).updatedAt ?? (p as Project).createdAt ?? t,
+      }))
+      saveRequirements(stampedReqs)
+      saveTodos(stampedTodos)
+      saveProjects(stampedProjs)
+      setRequirements(stampedReqs)
+      setTodos(stampedTodos)
+      setProjects(stampedProjs)
+      triggerRef.current()
       return true
     },
     [],
   )
+
+  /** 修改自动归档月份：走同步通道 */
+  const setArchiveMonths = useCallback((months: number) => {
+    const v = clampMonths(months)
+    persistArchiveMonths(v)
+    setArchiveMonthsState(v)
+    triggerRef.current()
+  }, [])
+
+  /**
+   * 用服务端合并结果覆盖本地（由 sync 层调用）
+   * 改用 LWW merge（不再 wholesale replace）：
+   *   - 本地独有的记录保留
+   *   - 远端独有 / 双方共有且远端更新的记录覆盖本地
+   * 这样任何本地未推送的改动都不会被远端覆盖。
+   * 不再触发 push（避免循环）
+   */
+  const applyRemote = useCallback(
+    (snap: {
+      requirements: Requirement[]
+      todos: TodoItem[]
+      projects: Project[]
+      settings?: { autoArchiveMonths?: number }
+    }) => {
+      const mergedReqs = mergeByUpdatedAt(snap.requirements, requirements)
+      const mergedTodos = mergeByUpdatedAt(snap.todos, todos)
+      const mergedProjects = mergeByUpdatedAt(snap.projects, projects)
+      saveRequirements(mergedReqs)
+      saveTodos(mergedTodos)
+      saveProjects(mergedProjects)
+      setRequirements(mergedReqs)
+      setTodos(mergedTodos)
+      setProjects(mergedProjects)
+      if (snap.settings?.autoArchiveMonths != null) {
+        const m = clampMonths(snap.settings.autoArchiveMonths)
+        persistArchiveMonths(m)
+        setArchiveMonthsState(m)
+      }
+    },
+    [requirements, todos, projects],
+  )
+
+  /**
+   * 清空本地全部数据 + 业务 localStorage key
+   * 切换用户 / 登出时调用；不触发 push
+   */
+  const clearAll = useCallback(() => {
+    localStorage.removeItem('dev-workbench:requirements')
+    localStorage.removeItem('dev-workbench:todos')
+    localStorage.removeItem('dev-workbench:projects')
+    localStorage.removeItem('dev-workbench:auto-archive-months')
+    setRequirements([])
+    setTodos([])
+    setProjects([])
+    setArchiveMonthsState(3)
+  }, [])
 
   const value = useMemo(
     () => ({
       requirements,
       todos,
       projects,
+      archiveMonths,
       addRequirement,
       updateRequirement,
       removeRequirement,
@@ -248,8 +398,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       removeProject,
       initProjects,
       restoreAll,
+      setArchiveMonths,
+      applyRemote,
+      clearAll,
     }),
-    [requirements, todos, projects, addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements, addTodo, toggleTodo, removeTodo, addProject, updateProject, removeProject, initProjects, restoreAll],
+    [
+      requirements, todos, projects, archiveMonths,
+      addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements,
+      addTodo, toggleTodo, removeTodo,
+      addProject, updateProject, removeProject,
+      initProjects, restoreAll, setArchiveMonths, applyRemote, clearAll,
+    ],
   )
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

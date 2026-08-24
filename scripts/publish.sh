@@ -81,11 +81,55 @@ ssh "$SERVER" "
 "
 ok "备份清理完成"
 
+# ---------- 4.5/5 同步后端（独立部署在 /var/www/dev-workbench-sync/） ----------
+SYNC_REMOTE_DIR="${SYNC_REMOTE_DIR:-/var/www/dev-workbench-sync}"
+log "4.5/5 同步后端到 $SERVER:$SYNC_REMOTE_DIR"
+
+# 检查本地 server/ 是否存在
+[ -d server ] || fail "本地 server/ 目录不存在"
+
+# 远端临时目录 + 原子替换（与前端同样的 mv-replace 模式）
+SYNC_UPLOAD_DIR="$(dirname "$SYNC_REMOTE_DIR")/.upload-dev-workbench-sync"
+SYNC_BAK_DIR="${SYNC_BAK_DIR:-/var/www/.bak-sync}"
+
+# 把 server/ 内容（不含 data/）打到压缩包上传，再远端解压
+TMP_TGZ="$(mktemp -t dev-workbench-sync.XXXXXX.tar.gz)"
+trap 'rm -f "$TMP_TGZ"' EXIT
+
+tar --exclude='server/data' --exclude='server/node_modules' -czf "$TMP_TGZ" -C server .
+
+ssh "$SERVER" "rm -rf '$SYNC_UPLOAD_DIR' && mkdir -p '$SYNC_UPLOAD_DIR'"
+scp "$TMP_TGZ" "$SERVER:$SYNC_UPLOAD_DIR/sync.tar.gz"
+ssh "$SERVER" "
+  set -e
+  mkdir -p '$SYNC_BAK_DIR'
+  if [ -d '$SYNC_REMOTE_DIR' ]; then
+    rm -rf '$SYNC_BAK_DIR/.latest'
+    mv '$SYNC_REMOTE_DIR' '$SYNC_BAK_DIR/.latest'
+  fi
+  mkdir -p '$SYNC_REMOTE_DIR'
+  tar -xzf '$SYNC_UPLOAD_DIR/sync.tar.gz' -C '$SYNC_REMOTE_DIR'
+  rm -rf '$SYNC_UPLOAD_DIR'
+  # 无依赖，npm install 仅用于写入 package-lock（如有）；无 node_modules 也可直接 node 跑
+  if [ -f '$SYNC_REMOTE_DIR/package.json' ]; then
+    (cd '$SYNC_REMOTE_DIR' && npm install --omit=dev --no-audit --no-fund) || true
+  fi
+  # pm2 reload / start
+  if [ -f '$SYNC_REMOTE_DIR/ecosystem.config.cjs' ]; then
+    cd '$SYNC_REMOTE_DIR'
+    pm2 reload ecosystem.config.cjs --update-env 2>/dev/null || pm2 start ecosystem.config.cjs
+    pm2 save 2>/dev/null || true
+  fi
+"
+ok "同步后端部署完成"
+# 不清空 SYNC_BAK_DIR/.latest：万一新版本启动失败，可手动回滚
+
 # ---------- 完成 ----------
 echo ""
 echo -e "${GREEN}==============================${NC}"
 echo -e "${GREEN}  部署成功${NC}"
 echo -e "${GREEN}==============================${NC}"
-echo -e "  URL:   ${GREEN}http://211.159.169.153/dev-workbench/${NC}"
-echo -e "  备份:  ${YELLOW}$BACKUP_PATH${NC}"
-echo -e "  回滚:  ssh $SERVER 'mv $BACKUP_PATH $REMOTE_DIR'"
+echo -e "  前端 URL: ${GREEN}http://211.159.169.153/dev-workbench/${NC}"
+echo -e "  后端 URL: ${GREEN}http://211.159.169.153/dev-workbench/api/${NC}"
+echo -e "  前端备份: ${YELLOW}$BACKUP_PATH${NC}"
+echo -e "  回滚:    ssh $SERVER 'mv $BACKUP_PATH $REMOTE_DIR'"

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import type { Requirement, RequirementStatus } from './types'
-import { useStore } from './store/StoreContext'
+import { StoreProvider, useStore, type PushTrigger } from './store/StoreContext'
 import { RequirementFormModal, type RequirementDraft } from './components/RequirementForm'
 import { RequirementTable } from './components/RequirementTable'
 import { RequirementKanban } from './components/RequirementKanban'
@@ -15,10 +15,14 @@ import { InstallPrompt } from './components/InstallPrompt'
 import { StatsView } from './components/StatsView'
 import { PreferencesModal } from './components/PreferencesModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
-import { findAutoArchiveTargets, getArchiveMonths } from './lib/archive'
+import { LoginModal } from './components/LoginModal'
+import { UserMenu } from './components/UserMenu'
+import { AuthProvider, useAuth } from './store/AuthContext'
+import { findAutoArchiveTargets } from './lib/archive'
 import { parseImportData } from './lib/migrate'
 import { hasProjectInitFlag, markProjectInit } from './lib/storage'
 import { seedProjects } from './data/seedProjects'
+import { startSync, type SyncHandle } from './lib/sync'
 
 type Tab = 'today' | 'list' | 'stats'
 type ListView = 'table' | 'kanban'
@@ -41,6 +45,99 @@ function useTheme() {
 }
 
 export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  )
+}
+
+/**
+ * 拿到 auth session 后再包 StoreProvider + AppRoot；
+ * AppRoot 内部根据 session 启动/暂停 sync
+ */
+function AppShell() {
+  const auth = useAuth()
+  const syncRef = useRef<SyncHandle | null>(null)
+  const pushTrigger = useCallback<PushTrigger>(() => {
+    syncRef.current?.schedulePush()
+  }, [])
+
+  return (
+    <StoreProvider pushTrigger={pushTrigger}>
+      <AppRoot syncRef={syncRef} auth={auth} />
+      <LoginModal open={auth.loginModalOpen} />
+    </StoreProvider>
+  )
+}
+
+/**
+ * 在 StoreProvider 之内：拿到 store 后启动 startSync，
+ * session 变化时通过 setSession 通知 sync。
+ */
+function AppRoot({
+  syncRef,
+  auth,
+}: {
+  syncRef: React.MutableRefObject<SyncHandle | null>
+  auth: ReturnType<typeof useAuth>
+}) {
+  const store = useStore()
+  // 让 startSync 的闭包永远拿到最新 store（之前用 mount 时的 store 会读到陈旧 state）
+  const storeRef = useRef(store)
+  storeRef.current = store
+  const prevSession = useRef<typeof auth.session>(null)
+
+  // mount 时启动 startSync（不立即拉，由 setSession 触发）
+  useEffect(() => {
+    const handle = startSync({
+      getSnapshot: () => {
+        const s = storeRef.current
+        return {
+          requirements: s.requirements,
+          todos: s.todos,
+          projects: s.projects,
+          settings: { autoArchiveMonths: s.archiveMonths },
+        }
+      },
+      applyRemote: (snap) => storeRef.current.applyRemote(snap),
+    })
+    syncRef.current = handle
+    return () => {
+      handle.stop()
+      syncRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // session 变化 → sync.setSession；登出时清空本地数据
+  useEffect(() => {
+    const cur = auth.session
+    const prev = prevSession.current
+    if (cur?.token === prev?.token && cur?.user.username === prev?.user.username) return
+
+    // 用户切换（登出或换账号）：清本地数据
+    if (prev && (!cur || cur.user.username !== prev.user.username)) {
+      store.clearAll()
+    }
+
+    syncRef.current?.setSession(cur?.token ?? null, cur?.user ?? null)
+    prevSession.current = cur
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.session?.token, auth.session?.user.username])
+
+  return <AppInner syncRef={syncRef} auth={auth} />
+}
+
+/* ---------------- App 主体 ---------------- */
+
+function AppInner({
+  syncRef,
+  auth,
+}: {
+  syncRef: React.MutableRefObject<SyncHandle | null>
+  auth: ReturnType<typeof useAuth>
+}) {
   const store = useStore()
   const { theme, toggle } = useTheme()
   const [tab, setTab] = useState<Tab>('today')
@@ -73,7 +170,7 @@ export default function App() {
   const notifyToastTimerRef = useRef<number | null>(null)
 
   // 首次启动自动导入：本地无任何需求且从未导入过时，自动载入 public/import-data.json
-  // （不再依赖 #import 参数，任何 URL 打开都会触发一次；导入成功后打标记避免重复）
+  // 注：sync 已经在 mount 时跑了一次 pull（覆盖本地），所以这里的判断基于已被同步覆盖后的本地
   useEffect(() => {
     if (store.requirements.length > 0) return
     if (localStorage.getItem(IMPORT_FLAG_KEY)) return
@@ -98,6 +195,7 @@ export default function App() {
   }, [])
 
   // 首次启动初始化项目库：本地无项目且从未初始化过时，写入从历史需求提取的种子项目
+  // 注：sync 已在 mount 时拉过一次（pull），如果服务端有项目就用了服务端的，本地仍为空才走种子
   useEffect(() => {
     if (store.projects.length > 0) return
     if (hasProjectInitFlag()) return
@@ -107,12 +205,13 @@ export default function App() {
   }, [])
 
   // 自动归档：启动时把已上线超过 N 个月的需求改为 archived
+  // 用 store.archiveMonths（同步通道）而非 getArchiveMonths 直读
   // archiveRunRef 防止 StrictMode 或其他原因触发 remount 时重复跑
   useEffect(() => {
     if (archiveRunRef.current) return
     archiveRunRef.current = true
 
-    const months = getArchiveMonths()
+    const months = store.archiveMonths
     const targets = findAutoArchiveTargets(store.requirements, months)
     for (const r of targets) {
       store.updateRequirement({ ...r, status: 'archived' })
@@ -132,7 +231,6 @@ export default function App() {
 
   const requestNotify = useCallback(() => {
     if (typeof Notification === 'undefined') return
-    // 权限已被浏览器拒绝时不会再弹授权框，requestPermission 会静默返回 denied
     if (Notification.permission === 'denied') {
       showNotifyToast({
         tone: 'warn',
@@ -168,7 +266,6 @@ export default function App() {
     setCloneSource(null)
   }
 
-  /** 克隆：以源需求为模板打开新建表单，关闭时清掉 */
   const handleClone = useCallback((r: Requirement) => {
     setEditing(null)
     setCloneSource(r)
@@ -184,7 +281,6 @@ export default function App() {
     [store],
   )
 
-  // 删除需求（带撤销）：先缓存被删项，5 秒内可一键恢复
   const handleDelete = useCallback(
     (id: string) => {
       const item = store.requirements.find((r) => r.id === id)
@@ -197,7 +293,6 @@ export default function App() {
     [store],
   )
 
-  // 批量删除（带撤销）：缓存所有被删项
   const handleBatchDelete = useCallback(
     (ids: string[]) => {
       const items = store.requirements.filter((r) => ids.includes(r.id))
@@ -220,15 +315,12 @@ export default function App() {
   // 全局键盘快捷键：N 新建需求、/ 聚焦搜索
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // 忽略带修饰键的组合（Ctrl/Cmd/Alt）
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      // 在输入框/文本域中不触发（除非是 / 且来自 body）
       const tag = (e.target as HTMLElement)?.tagName
       const isEditable =
         tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
         (e.target as HTMLElement)?.isContentEditable
       if (isEditable) return
-      // 有弹窗/抽屉打开时不触发（Esc 由各组件自行处理）
       if (document.querySelector('.fixed.inset-0.z-50')) return
 
       if (e.key === 'n' || e.key === 'N') {
@@ -249,22 +341,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      {/* PWA 安装引导：Chrome 浮窗 / iOS Modal / 微信顶部条 */}
       <InstallPrompt />
 
-      {/* 偏好设置（含自动归档月份） */}
       <PreferencesModal
         open={preferencesOpen}
         onClose={() => setPreferencesOpen(false)}
       />
 
-      {/* 快捷键面板 */}
       <ShortcutsModal
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
       />
 
-      {/* 自动归档完成提示 */}
       {archiveToast && (
         <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
           <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-amber-200 bg-white px-4 py-3 shadow-lg dark:border-amber-500/30 dark:bg-slate-900">
@@ -293,7 +381,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 删除撤销 toast */}
       {undoToast && (
         <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
           <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -329,7 +416,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 通知授权反馈 toast */}
       {notifyToast && (
         <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
           <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -379,7 +465,6 @@ export default function App() {
             </p>
           </div>
 
-          {/* Tab 切换 */}
           <nav className="ml-4 hidden items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800 sm:flex">
             {(
               [
@@ -403,7 +488,6 @@ export default function App() {
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {/* 新建需求（唯一保留的常驻操作按钮） */}
             <button className="btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }} title="新建需求（快捷键 N）">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
@@ -412,7 +496,7 @@ export default function App() {
               <kbd className="hidden rounded bg-white/20 px-1 py-0.5 text-[10px] font-medium lg:inline">N</kbd>
             </button>
 
-            {/* 更多操作下拉（桌面 / 移动统一） */}
+            {/* 更多操作下拉 */}
             <div className="relative">
               <button
                 onClick={() => setMobileMenuOpen((v) => !v)}
@@ -510,6 +594,19 @@ export default function App() {
               )}
             </div>
 
+            {/* 已登录：用户菜单（含 SyncBadge）；未登录：单独「登录」入口 */}
+            {syncRef.current && auth.session ? (
+              <UserMenu sync={syncRef.current} />
+            ) : (
+              <button
+                onClick={() => auth.showLogin('login')}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 sm:py-2"
+                aria-label="登录"
+              >
+                登录
+              </button>
+            )}
+
             <button
               onClick={toggle}
               className="rounded-lg border border-slate-200 p-1.5 text-slate-400 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 sm:p-2"
@@ -530,7 +627,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 移动端 Tab */}
         <div className="flex gap-1 border-t border-slate-200 px-3 py-1.5 dark:border-slate-800 sm:hidden">
           {(
             [
@@ -554,7 +650,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* 内容区 */}
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         {importBanner && (
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
@@ -585,7 +680,6 @@ export default function App() {
           </div>
         ) : tab === 'list' ? (
           <>
-            {/* 视图切换：表格 / 看板 */}
             <div className="mb-3 inline-flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
               {(['table', 'kanban'] as const).map((v) => (
                 <button
@@ -626,7 +720,6 @@ export default function App() {
         )}
       </main>
 
-      {/* 弹窗 */}
       <RequirementFormModal
         open={formOpen}
         initial={editing}

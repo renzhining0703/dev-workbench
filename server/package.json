@@ -1,0 +1,9 @@
+{
+  "name": "dev-workbench-sync",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node index.mjs"
+  }
+}

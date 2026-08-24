@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Modal } from './ui'
-import { ARCHIVE_MONTHS_RANGE, getArchiveMonths, setArchiveMonths } from '../lib/archive'
+import { ARCHIVE_MONTHS_RANGE } from '../lib/archive'
+import { useStore } from '../store/StoreContext'
 
 interface Props {
   open: boolean
@@ -10,14 +11,17 @@ interface Props {
 /**
  * 偏好设置弹窗
  * 当前仅包含"自动归档月份"；其他偏好可在此扩展
+ *
+ * 数据来源：store.archiveMonths / store.setArchiveMonths（走同步通道）
  */
 export function PreferencesModal({ open, onClose }: Props) {
-  const [months, setMonths] = useState(getArchiveMonths())
+  const { archiveMonths, setArchiveMonths } = useStore()
+  const [months, setMonths] = useState(archiveMonths)
 
-  // 每次打开时重新读取 localStorage，避免显示过期值
+  // 打开时从 store 重新读取（处理跨标签页 / 服务端推送的更新）
   useEffect(() => {
-    if (open) setMonths(getArchiveMonths())
-  }, [open])
+    if (open) setMonths(archiveMonths)
+  }, [open, archiveMonths])
 
   const save = () => {
     setArchiveMonths(months)
@@ -40,6 +44,9 @@ export function PreferencesModal({ open, onClose }: Props) {
           <p className="mb-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
             已上线超过设定月份的需求，下次启动时自动移入归档列表（状态改为「已归档」），
             保持主列表干净。如需恢复，在「更多 → 已归档」视图里手动改回「已上线」即可。
+          </p>
+          <p className="mb-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            💡 此设置会同步到云端，所有设备共享。
           </p>
           <div className="flex items-center gap-2">
             <input

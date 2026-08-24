@@ -4,3 +4,8 @@ dist
 *.local
 *.tsbuildinfo
 .workbuddy
+
+# 同步后端运行期数据（不要入库）
+server/data/
+# 本地覆盖的 env（含真实 token）
+.env*.local

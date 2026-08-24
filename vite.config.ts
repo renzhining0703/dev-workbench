@@ -53,5 +53,13 @@ export default defineConfig(({ command }) => ({
   server: {
     port: 5173,
     host: true,
+    // dev: 把 /api/* 反代到本机同步后端（8787）
+    // prod: 由 nginx 反代 /dev-workbench/api/* → 127.0.0.1:8787
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
+    },
   },
 }))
