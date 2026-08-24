@@ -100,15 +100,7 @@ function AppRoot({
   // mount 时启动 startSync（不立即拉，由 setSession 触发）
   useEffect(() => {
     const handle = startSync({
-      getSnapshot: () => {
-        const s = storeRef.current
-        return {
-          requirements: s.requirements,
-          todos: s.todos,
-          projects: s.projects,
-          settings: { autoArchiveMonths: s.archiveMonths },
-        }
-      },
+      getSnapshot: () => storeRef.current.getSyncData(),
       applyRemote: (snap) => storeRef.current.applyRemote(snap),
     })
     syncRef.current = handle

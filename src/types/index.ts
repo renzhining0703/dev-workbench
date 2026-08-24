@@ -50,6 +50,8 @@ export interface Requirement {
   remark: string
   /** 更新时间 */
   updatedAt: string
+  /** 软删除墓碑 ISO（同步协议：删除打墓碑参与 LWW 合并，UI 层过滤；超 90 天物理清理） */
+  deletedAt?: string
 }
 
 /** 待办事项 */
@@ -62,6 +64,8 @@ export interface TodoItem {
   createdAt: string
   /** 最后更新时间（同步用，缺字段视为 createdAt） */
   updatedAt?: string
+  /** 软删除墓碑 ISO（同步协议：删除打墓碑参与 LWW 合并，UI 层过滤；超 90 天物理清理） */
+  deletedAt?: string
 }
 
 /** 项目（下拉选项数据源，独立维护） */
@@ -75,6 +79,8 @@ export interface Project {
   createdAt: string
   /** 最后更新时间（同步用，缺字段视为 createdAt） */
   updatedAt?: string
+  /** 软删除墓碑 ISO（同步协议：删除打墓碑参与 LWW 合并，UI 层过滤；超 90 天物理清理） */
+  deletedAt?: string
 }
 
 export const STATUS_META: Record<

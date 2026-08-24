@@ -66,6 +66,26 @@ export function mergeSettings(remote, local) {
   return { ...remote, ...local }
 }
 
+/** 墓碑保留天数：软删除条目超过该天数被物理清理（与前端 lib/tombstone.ts 一致） */
+export const TOMBSTONE_GC_DAYS = 90
+
+const DAY_MS = 86_400_000
+
+/**
+ * 物理清理超期墓碑（> GC 天数）。
+ * 墓碑参与 LWW 合并以传播删除；不清理会无限膨胀。
+ * deletedAt 无法解析时保守保留。
+ */
+export function gcTombstones(list, nowMs = Date.now()) {
+  if (!Array.isArray(list)) return []
+  const cutoff = nowMs - TOMBSTONE_GC_DAYS * DAY_MS
+  return list.filter((x) => {
+    if (!x || !x.deletedAt) return true
+    const t = new Date(x.deletedAt).getTime()
+    return Number.isFinite(t) ? t >= cutoff : true
+  })
+}
+
 /**
  * push 全量合并（v1 push handler 的合并逻辑平移）。
  * 非数组集合与 v1 一样按空数组处理；返回带新 serverTs 的完整快照。
@@ -74,18 +94,18 @@ export function mergeSnapshot(remote, body, nowIso = new Date().toISOString()) {
   return {
     version: SNAPSHOT_VERSION,
     serverTs: nowIso,
-    requirements: mergeByUpdatedAt(
+    requirements: gcTombstones(mergeByUpdatedAt(
       Array.isArray(remote.requirements) ? remote.requirements : [],
       Array.isArray(body.requirements) ? body.requirements : [],
-    ),
-    todos: mergeByUpdatedAt(
+    )),
+    todos: gcTombstones(mergeByUpdatedAt(
       Array.isArray(remote.todos) ? remote.todos : [],
       Array.isArray(body.todos) ? body.todos : [],
-    ),
-    projects: mergeByUpdatedAt(
+    )),
+    projects: gcTombstones(mergeByUpdatedAt(
       Array.isArray(remote.projects) ? remote.projects : [],
       Array.isArray(body.projects) ? body.projects : [],
-    ),
+    )),
     settings: mergeSettings(remote.settings ?? {}, body.settings ?? {}),
   }
 }

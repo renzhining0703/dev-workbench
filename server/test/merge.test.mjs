@@ -9,6 +9,8 @@ import {
   mergeByUpdatedAt,
   mergeSettings,
   mergeSnapshot,
+  gcTombstones,
+  TOMBSTONE_GC_DAYS,
 } from '../lib/merge.mjs'
 
 const T = (s) => `2026-01-0${s}T00:00:00.000Z`
@@ -91,4 +93,63 @@ test('mergeSnapshot：输出带新 serverTs 与 version', () => {
 test('mergeSnapshot：settings 非对象按空对象处理', () => {
   const merged = mergeSnapshot({ settings: { a: 1 } }, { settings: null })
   assert.deepEqual(merged.settings, { a: 1 })
+})
+
+/* ---------------- 墓碑（软删除）协议 ---------------- */
+
+/** 相对当前时间的动态时间戳（GC 按真实 now 判断，写死旧日期会被当超期墓碑清掉） */
+const daysAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString()
+
+test('墓碑：删除随 push 传播 —— 本地墓碑 updatedAt 更新 → 服务端存墓碑', () => {
+  const remote = [{ id: 'a', content: 'x', done: false, updatedAt: daysAgo(2) }]
+  const body = [{ id: 'a', content: 'x', done: false, deletedAt: daysAgo(1), updatedAt: daysAgo(1) }]
+  const merged = mergeSnapshot({ todos: remote }, { todos: body })
+  assert.equal(merged.todos.length, 1)
+  assert.ok(merged.todos[0].deletedAt)
+})
+
+test('墓碑：pull 侧复活拦截 —— 服务端墓碑 vs 客户端旧活条目 → 墓碑胜', () => {
+  const remote = [{ id: 'a', title: 'deleted', deletedAt: T(3), updatedAt: T(3) }]
+  const local = [{ id: 'a', title: 'live', updatedAt: T(1) }]
+  assert.ok(mergeByUpdatedAt(remote, local)[0].deletedAt)
+})
+
+test('墓碑：删除后被更晚的编辑覆盖 → 编辑胜出（统一最后写赢语义）', () => {
+  const remote = [{ id: 'a', title: 'deleted', deletedAt: T(1), updatedAt: T(1) }]
+  const local = [{ id: 'a', title: 'edited', updatedAt: T(4) }]
+  const merged = mergeByUpdatedAt(remote, local)
+  assert.equal(merged[0].title, 'edited')
+  assert.equal(merged[0].deletedAt, undefined)
+})
+
+test('gcTombstones：超期墓碑物理清理，未超期与活跃条目保留', () => {
+  const now = Date.parse('2026-08-24T00:00:00.000Z')
+  const old = new Date(now - (TOMBSTONE_GC_DAYS + 1) * 86_400_000).toISOString()
+  const fresh = new Date(now - 86_400_000).toISOString()
+  const list = [
+    { id: 'a', deletedAt: old },
+    { id: 'b', deletedAt: fresh },
+    { id: 'c' },
+    { id: 'd', deletedAt: 'not-a-date' },
+  ]
+  const gc = gcTombstones(list, now)
+  assert.deepEqual(gc.map((x) => x.id), ['b', 'c', 'd'])
+})
+
+test('gcTombstones：非数组按空数组处理', () => {
+  assert.deepEqual(gcTombstones(null), [])
+  assert.deepEqual(gcTombstones(undefined), [])
+})
+
+test('mergeSnapshot：合并收尾清理超期墓碑（union 合并会把墓碑带回）', () => {
+  const nowIso = '2026-08-24T00:00:00.000Z'
+  const now = Date.parse(nowIso)
+  const old = new Date(now - (TOMBSTONE_GC_DAYS + 5) * 86_400_000).toISOString()
+  const fresh = new Date(now - 86_400_000).toISOString()
+  const merged = mergeSnapshot(
+    { todos: [{ id: 'old', deletedAt: old, updatedAt: old }] },
+    { todos: [{ id: 'fresh', deletedAt: fresh, updatedAt: fresh }] },
+    nowIso,
+  )
+  assert.deepEqual(merged.todos.map((x) => x.id), ['fresh'])
 })

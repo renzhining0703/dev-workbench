@@ -24,6 +24,7 @@ import {
 import { getArchiveMonths, setArchiveMonths as persistArchiveMonths } from '../lib/archive'
 import type { MigratedRequirement } from '../lib/migrate'
 import { mergeByUpdatedAt } from '../lib/sync'
+import { active, gcTombstones } from '../lib/tombstone'
 
 /** 同步触发器：由外部（App 层 startSync）注入；mutation 后调用 */
 export type PushTrigger = () => void
@@ -31,9 +32,20 @@ export type PushTrigger = () => void
 const noopPush: PushTrigger = () => {}
 
 interface Store {
+  /** 活跃数据（墓碑条目已过滤，UI 读取一律用这三个） */
   requirements: Requirement[]
   todos: TodoItem[]
   projects: Project[]
+  /**
+   * 同步层专用：完整数据（含墓碑）。
+   * push 快照必须带墓碑，删除才能传播到服务端/其它设备；UI 禁用。
+   */
+  getSyncData: () => {
+    requirements: Requirement[]
+    todos: TodoItem[]
+    projects: Project[]
+    settings: { autoArchiveMonths: number }
+  }
   /** 自动归档月份（同步通道） */
   archiveMonths: number
   addRequirement: (draft: Omit<Requirement, 'id' | 'createdAt' | 'updatedAt'>) => void
@@ -155,19 +167,33 @@ export function StoreProvider({
     })
   }, [])
 
+  /** 删除：打墓碑软删（同步协议需要墓碑传播删除；>90 天物理清理） */
   const removeRequirement = useCallback((id: string) => {
     setRequirements((prev) => {
-      const next = prev.filter((r) => r.id !== id)
+      const t = nowISO()
+      const next = prev.map((r) =>
+        r.id === id ? { ...r, deletedAt: t, updatedAt: t } : r,
+      )
       saveRequirements(next)
       triggerRef.current()
       return next
     })
   }, [])
 
-  /** 恢复已删除的需求（保留原始 id/createdAt） */
+  /** 恢复已删除的需求：优先复活墓碑（撤销删除场景），否则按新增插入 */
   const restoreRequirement = useCallback((item: Requirement) => {
     setRequirements((prev) => {
-      if (prev.some((r) => r.id === item.id)) return prev
+      const existing = prev.find((r) => r.id === item.id)
+      if (existing?.deletedAt) {
+        const t = nowISO()
+        const next = prev.map((r) =>
+          r.id === item.id ? { ...r, deletedAt: undefined, updatedAt: t } : r,
+        )
+        saveRequirements(next)
+        triggerRef.current()
+        return next
+      }
+      if (existing) return prev
       const next = [item, ...prev]
       saveRequirements(next)
       triggerRef.current()
@@ -225,9 +251,13 @@ export function StoreProvider({
     })
   }, [])
 
+  /** 删除：打墓碑软删（同步协议需要墓碑传播删除；>90 天物理清理） */
   const removeTodo = useCallback((id: string) => {
     setTodos((prev) => {
-      const next = prev.filter((t) => t.id !== id)
+      const t = nowISO()
+      const next = prev.map((x) =>
+        x.id === id ? { ...x, deletedAt: t, updatedAt: t } : x,
+      )
       saveTodos(next)
       triggerRef.current()
       return next
@@ -275,9 +305,13 @@ export function StoreProvider({
     [projects],
   )
 
+  /** 删除：打墓碑软删（同步协议需要墓碑传播删除；>90 天物理清理） */
   const removeProject = useCallback((id: string) => {
     setProjects((prev) => {
-      const next = prev.filter((p) => p.id !== id)
+      const t = nowISO()
+      const next = prev.map((p) =>
+        p.id === id ? { ...p, deletedAt: t, updatedAt: t } : p,
+      )
       saveProjects(next)
       triggerRef.current()
       return next
@@ -323,12 +357,16 @@ export function StoreProvider({
         ...p,
         updatedAt: (p as Project).updatedAt ?? (p as Project).createdAt ?? t,
       }))
-      saveRequirements(stampedReqs)
-      saveTodos(stampedTodos)
-      saveProjects(stampedProjs)
-      setRequirements(stampedReqs)
-      setTodos(stampedTodos)
-      setProjects(stampedProjs)
+      // 备份里保留墓碑（恢复后删除状态不丢），但超期墓碑顺手清理
+      const gcReqs = gcTombstones(stampedReqs)
+      const gcTodos = gcTombstones(stampedTodos)
+      const gcProjs = gcTombstones(stampedProjs)
+      saveRequirements(gcReqs)
+      saveTodos(gcTodos)
+      saveProjects(gcProjs)
+      setRequirements(gcReqs)
+      setTodos(gcTodos)
+      setProjects(gcProjs)
       triggerRef.current()
       return true
     },
@@ -358,13 +396,13 @@ export function StoreProvider({
       projects: Project[]
       settings?: { autoArchiveMonths?: number }
     }) => {
-      // 云端数据统一规范化（旧快照可能缺 projects 字段）
-      const mergedReqs = mergeByUpdatedAt(
+      // 云端数据统一规范化（旧快照可能缺 projects 字段），合并后清理超期墓碑
+      const mergedReqs = gcTombstones(mergeByUpdatedAt(
         snap.requirements.map(normalizeRequirement),
         requirements,
-      )
-      const mergedTodos = mergeByUpdatedAt(snap.todos, todos)
-      const mergedProjects = mergeByUpdatedAt(snap.projects, projects)
+      ))
+      const mergedTodos = gcTombstones(mergeByUpdatedAt(snap.todos, todos))
+      const mergedProjects = gcTombstones(mergeByUpdatedAt(snap.projects, projects))
       saveRequirements(mergedReqs)
       saveTodos(mergedTodos)
       saveProjects(mergedProjects)
@@ -395,11 +433,24 @@ export function StoreProvider({
     setArchiveMonthsState(3)
   }, [])
 
-  const value = useMemo(
+  /** 同步层专用：完整数据（含墓碑）。push 快照必须带墓碑，删除才能传播 */
+  const getSyncData = useCallback(
     () => ({
       requirements,
       todos,
       projects,
+      settings: { autoArchiveMonths: archiveMonths },
+    }),
+    [requirements, todos, projects, archiveMonths],
+  )
+
+  const value = useMemo(
+    () => ({
+      // UI 消费的是活跃数据（墓碑已过滤）
+      requirements: active(requirements),
+      todos: active(todos),
+      projects: active(projects),
+      getSyncData,
       archiveMonths,
       addRequirement,
       updateRequirement,
@@ -419,7 +470,7 @@ export function StoreProvider({
       clearAll,
     }),
     [
-      requirements, todos, projects, archiveMonths,
+      requirements, todos, projects, archiveMonths, getSyncData,
       addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements,
       addTodo, toggleTodo, removeTodo,
       addProject, updateProject, removeProject,
