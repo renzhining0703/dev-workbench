@@ -103,7 +103,8 @@ trap 'rm -f "$TMP_TGZ"' EXIT
 
 [ -d server/node_modules ] || fail "server/node_modules 不存在，请先在 server/ 下 npm install"
 
-tar --exclude='data' --exclude='*.log' --exclude='.git' -czf "$TMP_TGZ" -C server .
+# --no-xattr：不带 macOS 扩展属性，避免远端 GNU tar 报 LIBARCHIVE.xattr 警告
+tar --no-xattr --exclude='data' --exclude='*.log' --exclude='.git' -czf "$TMP_TGZ" -C server .
 # 部署包里绝不允许出现用户数据
 if tar -tzf "$TMP_TGZ" | grep -qE '^\./data/'; then
   fail "部署包中混入了 data/ 用户数据，已中止"
@@ -113,6 +114,13 @@ ssh "$SERVER" "rm -rf '$SYNC_UPLOAD_DIR' && mkdir -p '$SYNC_UPLOAD_DIR'"
 scp "$TMP_TGZ" "$SERVER:$SYNC_UPLOAD_DIR/sync.tar.gz"
 ssh "$SERVER" "
   set -e
+  # 非交互 SSH shell 不加载 ~/.bashrc（nvm 不生效）——手动补 PATH
+  if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\"; fi
+  for d in \"\$HOME\"/.nvm/versions/node/*/bin /usr/local/bin /usr/bin; do
+    case \":\$PATH:\" in *\":\$d:\"*) ;; *) PATH=\"\$d:\$PATH\" ;; esac
+  done
+  export PATH
+  command -v node >/dev/null || { echo '✗ 远端未找到 node（nvm？）' >&2; exit 1; }
   mkdir -p '$SYNC_BAK_DIR'
   if [ -d '$SYNC_REMOTE_DIR' ]; then
     rm -rf '$SYNC_BAK_DIR/.latest'
@@ -129,9 +137,10 @@ ssh "$SERVER" "
   if [ -f '$SYNC_REMOTE_DIR/package.json' ]; then
     (cd '$SYNC_REMOTE_DIR' && npm install --omit=dev --no-audit --no-fund) || true
   fi
-  # pm2 reload / start
+  # pm2 reload / start（未安装则全局装一次）
   if [ -f '$SYNC_REMOTE_DIR/ecosystem.config.cjs' ]; then
     cd '$SYNC_REMOTE_DIR'
+    command -v pm2 >/dev/null || npm install -g pm2
     pm2 reload ecosystem.config.cjs --update-env 2>/dev/null || pm2 start ecosystem.config.cjs
     pm2 save 2>/dev/null || true
   fi
