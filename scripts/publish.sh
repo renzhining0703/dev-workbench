@@ -92,15 +92,22 @@ log "4.5/5 同步后端到 $SERVER:$SYNC_REMOTE_DIR"
 SYNC_UPLOAD_DIR="$(dirname "$SYNC_REMOTE_DIR")/.upload-dev-workbench-sync"
 SYNC_BAK_DIR="${SYNC_BAK_DIR:-/var/www/.bak-sync}"
 
-# 把 server/ 内容（不含 data/）打到压缩包上传，再远端解压
+# 把 server/ 内容打到压缩包上传，再远端解压
 # v2：node_modules（express 等纯 JS 依赖）一并打包——服务器零安装零编译；
 #     远端 npm install 仅作依赖漂移兜底（失败不影响启动）
+#
+# ⚠️ 排除模式必须匹配打包后的相对路径（./data），带 server/ 前缀的旧写法
+#    在 -C server . 模式下不生效——v1 曾因此把本地 data/ 一起上传并覆盖生产数据
 TMP_TGZ="$(mktemp -t dev-workbench-sync.XXXXXX.tar.gz)"
 trap 'rm -f "$TMP_TGZ"' EXIT
 
 [ -d server/node_modules ] || fail "server/node_modules 不存在，请先在 server/ 下 npm install"
 
-tar --exclude='server/data' --exclude='server/sync.log' -czf "$TMP_TGZ" -C server .
+tar --exclude='data' --exclude='*.log' --exclude='.git' -czf "$TMP_TGZ" -C server .
+# 部署包里绝不允许出现用户数据
+if tar -tzf "$TMP_TGZ" | grep -qE '^\./data/'; then
+  fail "部署包中混入了 data/ 用户数据，已中止"
+fi
 
 ssh "$SERVER" "rm -rf '$SYNC_UPLOAD_DIR' && mkdir -p '$SYNC_UPLOAD_DIR'"
 scp "$TMP_TGZ" "$SERVER:$SYNC_UPLOAD_DIR/sync.tar.gz"
@@ -112,6 +119,10 @@ ssh "$SERVER" "
     mv '$SYNC_REMOTE_DIR' '$SYNC_BAK_DIR/.latest'
   fi
   mkdir -p '$SYNC_REMOTE_DIR'
+  # 生产数据（v1 JSON / v2 SQLite）不在部署包里——从旧目录原样带回，跨版本保留
+  if [ -d '$SYNC_BAK_DIR/.latest/data' ]; then
+    cp -a '$SYNC_BAK_DIR/.latest/data' '$SYNC_REMOTE_DIR/data'
+  fi
   tar -xzf '$SYNC_UPLOAD_DIR/sync.tar.gz' -C '$SYNC_REMOTE_DIR'
   rm -rf '$SYNC_UPLOAD_DIR'
   # node_modules 已随包携带（纯 JS）；npm install 仅作兜底，失败不影响启动
