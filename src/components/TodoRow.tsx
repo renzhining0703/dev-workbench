@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import type { TodoItem } from '../types'
+import { nextPriority, priorityOf, PRIORITY_META } from '../lib/todos'
 
 /** 完成时间展示：HH:mm（旧数据缺 completedAt 时不显示） */
 export function fmtCompletedAt(iso: string | undefined): string {
@@ -15,17 +16,29 @@ export function fmtCompletedAt(iso: string | undefined): string {
 interface TodoRowProps {
   todo: TodoItem
   onToggle: (id: string) => void
-  onUpdate: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done'>>) => void
+  onUpdate: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done' | 'priority' | 'requirementId'>>) => void
   onRemove: (id: string) => void
   /** 置灰内容（昨日遗留等次要场景） */
   muted?: boolean
+  /** 关联需求名称（有值且 todo.requirementId 存在时展示 chip，可点击跳转） */
+  reqName?: string
+  /** 点击关联需求 chip → 跳回需求抽屉 */
+  onOpenRequirement?: (reqId: string) => void
 }
 
 /**
- * 待办行：勾选 / 行内编辑（双击或铅笔）/ 删除 / 完成时间。
+ * 待办行：勾选 / 行内编辑（双击或铅笔）/ 优先级三态循环 / 关联需求 chip / 删除 / 完成时间。
  * 今日概览与待办 Tab 共用。
  */
-export function TodoRow({ todo, onToggle, onUpdate, onRemove, muted }: TodoRowProps) {
+export function TodoRow({
+  todo,
+  onToggle,
+  onUpdate,
+  onRemove,
+  muted,
+  reqName,
+  onOpenRequirement,
+}: TodoRowProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(todo.content)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -56,6 +69,8 @@ export function TodoRow({ todo, onToggle, onUpdate, onRemove, muted }: TodoRowPr
   }
 
   const doneTime = fmtCompletedAt(todo.completedAt)
+  const prio = priorityOf(todo)
+  const prioMeta = PRIORITY_META[prio]
 
   return (
     <li className="group flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -105,6 +120,29 @@ export function TodoRow({ todo, onToggle, onUpdate, onRemove, muted }: TodoRowPr
             </span>
           )}
         </span>
+      )}
+
+      {/* 关联需求 chip（点击跳回需求抽屉） */}
+      {!editing && reqName && todo.requirementId && (
+        <button
+          onClick={() => onOpenRequirement?.(todo.requirementId!)}
+          className="max-w-[180px] shrink-0 truncate rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25"
+          title={`打开需求「${reqName}」`}
+        >
+          🔗 {reqName}
+        </button>
+      )}
+
+      {/* 优先级三态循环：normal 普通点 / high 红高 / low 灰低，点击切换 */}
+      {!editing && (
+        <button
+          onClick={() => onUpdate(todo.id, { priority: nextPriority(prio) })}
+          className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold transition ${prioMeta.chip}`}
+          aria-label={`优先级：${prioMeta.label}，点击切换`}
+          title={`优先级：${prioMeta.label}，点击切换`}
+        >
+          {prio === 'high' ? '高' : prio === 'low' ? '低' : '·'}
+        </button>
       )}
 
       {!editing && (

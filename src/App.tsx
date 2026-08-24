@@ -9,6 +9,7 @@ import { RequirementKanban } from './components/RequirementKanban'
 import { ProjectManagerModal } from './components/ProjectManagerModal'
 import { PublishReminder, TodoPanel } from './components/TodoPanel'
 import { TodoView } from './components/TodoView'
+import { TodoSummaryReminder } from './components/TodoSummaryReminder'
 import { ExportModal } from './components/ExportModal'
 import { ImportModal } from './components/ImportModal'
 import { BackupModal } from './components/BackupModal'
@@ -162,6 +163,8 @@ function AppInner({
   const [undoToast, setUndoToast] = useState<{ label: string; items: Requirement[] } | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [importBanner, setImportBanner] = useState('')
+  // 待办关联需求跳转：待办 chip 点击 → 切到需求列表并打开对应抽屉
+  const [pendingReqId, setPendingReqId] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   // 防止组件 remount 时重复跑自动归档
   const archiveRunRef = useRef(false)
@@ -318,6 +321,13 @@ function AppInner({
     setUndoToast(null)
     if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current)
   }, [undoToast, store])
+
+  /** 待办关联需求 → 跳转需求列表并打开抽屉（列表 Tab 下的表格/看板都切到表格视图，抽屉在表格里） */
+  const jumpToRequirement = useCallback((reqId: string) => {
+    setListView('table')
+    setTab('list')
+    setPendingReqId(reqId)
+  }, [])
 
   // 全局键盘快捷键：N 新建需求、/ 聚焦搜索
   useEffect(() => {
@@ -687,15 +697,18 @@ function AppInner({
               onUpdateTodo={store.updateTodo}
               onRemoveTodo={store.removeTodo}
               onViewAll={() => setTab('todo')}
+              onOpenRequirement={jumpToRequirement}
             />
           </div>
         ) : tab === 'todo' ? (
           <TodoView
             todos={store.todos}
+            requirements={store.requirements}
             onAddTodo={store.addTodo}
             onToggleTodo={store.toggleTodo}
             onUpdateTodo={store.updateTodo}
             onRemoveTodo={store.removeTodo}
+            onOpenRequirement={jumpToRequirement}
           />
         ) : tab === 'list' ? (
           <>
@@ -724,6 +737,8 @@ function AppInner({
                 onBatchDelete={handleBatchDelete}
                 onStatusChange={handleStatusChange}
                 searchInputRef={searchInputRef}
+                externalOpenId={pendingReqId}
+                onExternalOpened={() => setPendingReqId(null)}
               />
             ) : (
               <RequirementKanban
@@ -738,6 +753,12 @@ function AppInner({
           <StatsView requirements={store.requirements} />
         )}
       </main>
+
+      {/* 今日待办汇总通知：每天首次打开时今日未完成 >3 条触发 */}
+      <TodoSummaryReminder
+        todos={store.todos}
+        onViewTodos={() => setTab('todo')}
+      />
 
       <RequirementFormModal
         open={formOpen}

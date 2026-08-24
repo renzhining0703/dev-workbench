@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Project, Requirement, TodoItem } from '../types'
+import type { Project, Requirement, TodoItem, TodoPriority } from '../types'
 import { normalizeRequirement } from '../lib/projects'
 import {
   loadProjects,
@@ -55,10 +55,17 @@ interface Store {
   restoreRequirement: (item: Requirement) => void
   /** 批量导入（id 去重合并），返回实际导入条数 */
   importRequirements: (items: MigratedRequirement[]) => number
-  addTodo: (content: string, date: string) => void
+  addTodo: (
+    content: string,
+    date: string,
+    extra?: { priority?: TodoPriority; requirementId?: string },
+  ) => void
   toggleTodo: (id: string) => void
-  /** 编辑待办（内容 / 目标日期）；done 变化时同步维护 completedAt */
-  updateTodo: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done'>>) => void
+  /** 编辑待办（内容 / 目标日期 / 优先级 / 关联需求）；done 变化时同步维护 completedAt */
+  updateTodo: (
+    id: string,
+    patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done' | 'priority' | 'requirementId'>>,
+  ) => void
   removeTodo: (id: string) => void
   /** 项目库维护（名称去重），返回是否成功 */
   addProject: (name: string, moduleBased?: boolean) => boolean
@@ -224,23 +231,32 @@ export function StoreProvider({
     [requirements],
   )
 
-  const addTodo = useCallback((content: string, date: string) => {
-    setTodos((prev) => {
-      const t = nowISO()
-      const item: TodoItem = {
-        id: uid(),
-        content,
-        date,
-        done: false,
-        createdAt: t,
-        updatedAt: t,
-      }
-      const next = [item, ...prev]
-      saveTodos(next)
-      triggerRef.current()
-      return next
-    })
-  }, [])
+  const addTodo = useCallback(
+    (
+      content: string,
+      date: string,
+      extra?: { priority?: TodoPriority; requirementId?: string },
+    ) => {
+      setTodos((prev) => {
+        const t = nowISO()
+        const item: TodoItem = {
+          id: uid(),
+          content,
+          date,
+          done: false,
+          priority: extra?.priority ?? 'normal',
+          requirementId: extra?.requirementId,
+          createdAt: t,
+          updatedAt: t,
+        }
+        const next = [item, ...prev]
+        saveTodos(next)
+        triggerRef.current()
+        return next
+      })
+    },
+    [],
+  )
 
   const toggleTodo = useCallback((id: string) => {
     setTodos((prev) => {
@@ -263,7 +279,10 @@ export function StoreProvider({
 
   /** 编辑待办：patch 内 done 变化时同步维护 completedAt */
   const updateTodo = useCallback(
-    (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done'>>) => {
+    (
+      id: string,
+      patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done' | 'priority' | 'requirementId'>>,
+    ) => {
       setTodos((prev) => {
         const next = prev.map((t) => {
           if (t.id !== id) return t

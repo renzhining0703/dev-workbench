@@ -13,8 +13,9 @@ import {
   subMonths,
   addMonths,
 } from 'date-fns'
-import type { TodoItem } from '../types'
+import type { Requirement, TodoItem } from '../types'
 import { toDateStr } from '../lib/utils'
+import { sortTodos } from '../lib/todos'
 import { TodoRow } from './TodoRow'
 
 const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日']
@@ -22,10 +23,13 @@ const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周�
 
 interface TodoViewProps {
   todos: TodoItem[]
+  requirements: Requirement[]
   onAddTodo: (content: string, date: string) => void
   onToggleTodo: (id: string) => void
-  onUpdateTodo: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done'>>) => void
+  onUpdateTodo: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done' | 'priority' | 'requirementId'>>) => void
   onRemoveTodo: (id: string) => void
+  /** 点击关联需求 chip → 跳回需求抽屉 */
+  onOpenRequirement?: (reqId: string) => void
 }
 
 /** 每天完成数（completedAt 缺失的旧数据回退用待办目标日期） */
@@ -72,10 +76,12 @@ function buildStats(doneByDay: Map<string, number>) {
 
 export function TodoView({
   todos,
+  requirements,
   onAddTodo,
   onToggleTodo,
   onUpdateTodo,
   onRemoveTodo,
+  onOpenRequirement,
 }: TodoViewProps) {
   const today = toDateStr(new Date())
   const [selected, setSelected] = useState(today)
@@ -86,10 +92,7 @@ export function TodoView({
 
   const selectedDate = parseISO(selected)
   const dayTodos = useMemo(
-    () =>
-      todos
-        .filter((t) => t.date === selected)
-        .sort((a, b) => Number(a.done) - Number(b.done) || a.createdAt.localeCompare(b.createdAt)),
+    () => sortTodos(todos.filter((t) => t.date === selected)),
     [todos, selected],
   )
   const doneCount = dayTodos.filter((t) => t.done).length
@@ -280,6 +283,8 @@ export function TodoView({
                 onToggle={onToggleTodo}
                 onUpdate={onUpdateTodo}
                 onRemove={onRemoveTodo}
+                reqName={t.requirementId ? requirements.find((r) => r.id === t.requirementId)?.name : undefined}
+                onOpenRequirement={onOpenRequirement}
               />
             ))}
           </ul>

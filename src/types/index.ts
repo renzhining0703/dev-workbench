@@ -54,6 +54,9 @@ export interface Requirement {
   deletedAt?: string
 }
 
+/** 待办优先级：high 置顶红标 / normal 默认 / low 沉底灰标 */
+export type TodoPriority = 'low' | 'normal' | 'high'
+
 /** 待办事项 */
 export interface TodoItem {
   id: string
@@ -63,9 +66,9 @@ export interface TodoItem {
   done: boolean
   /** 完成时间 ISO：勾选时写入，取消勾选清除（历史/统计用） */
   completedAt?: string
-  /** 优先级（预留字段，UI 未启用）：缺省 normal */
-  priority?: 'low' | 'normal' | 'high'
-  /** 关联需求 id（预留字段，UI 未启用）：从今日节点一键生成待办时写入 */
+  /** 优先级：缺省 normal */
+  priority?: TodoPriority
+  /** 关联需求 id：从今日节点一键生成待办时写入，可点击跳回需求抽屉 */
   requirementId?: string
   createdAt: string
   /** 最后更新时间（同步用，缺字段视为 createdAt） */

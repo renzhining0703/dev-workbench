@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Requirement, TodoItem } from '../types'
 import { isDateToday, toDateStr } from '../lib/utils'
 import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
+import { sortTodos } from '../lib/todos'
 import { TodoRow } from './TodoRow'
 
 /* ---------------- 今日上线提醒 ---------------- */
@@ -89,12 +90,18 @@ export function PublishReminder({ requirements }: { requirements: Requirement[] 
 interface TodoProps {
   todos: TodoItem[]
   requirements: Requirement[]
-  onAddTodo: (content: string, date: string) => void
+  onAddTodo: (
+    content: string,
+    date: string,
+    extra?: { priority?: 'low' | 'normal' | 'high'; requirementId?: string },
+  ) => void
   onToggleTodo: (id: string) => void
-  onUpdateTodo: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done'>>) => void
+  onUpdateTodo: (id: string, patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done' | 'priority' | 'requirementId'>>) => void
   onRemoveTodo: (id: string) => void
   /** 跳转到「待办」Tab（查看全部/历史） */
   onViewAll?: () => void
+  /** 点击关联需求 chip → 跳回需求抽屉 */
+  onOpenRequirement?: (reqId: string) => void
 }
 
 export function TodoPanel({
@@ -105,16 +112,14 @@ export function TodoPanel({
   onUpdateTodo,
   onRemoveTodo,
   onViewAll,
+  onOpenRequirement,
 }: TodoProps) {
   const [input, setInput] = useState('')
   const [overdueOpen, setOverdueOpen] = useState(false)
   const today = toDateStr(new Date())
 
   const todayTodos = useMemo(
-    () =>
-      todos
-        .filter((t) => t.date === today)
-        .sort((a, b) => Number(a.done) - Number(b.done)),
+    () => sortTodos(todos.filter((t) => t.date === today)),
     [todos, today],
   )
   const doneCount = todayTodos.filter((t) => t.done).length
@@ -154,20 +159,26 @@ export function TodoPanel({
           title="今日开始开发"
           icon="code"
           color="blue"
+          todoPrefix="开发："
           items={todayTasks.dev.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
+          onMakeTodo={(it) => onAddTodo(`开发：${it.name}`, today, { requirementId: it.id })}
         />
         <TaskCard
           title="今日待提测"
           icon="flask"
           color="amber"
+          todoPrefix="提测："
           items={todayTasks.test.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
+          onMakeTodo={(it) => onAddTodo(`提测：${it.name}`, today, { requirementId: it.id })}
         />
         <TaskCard
           title="今日上线"
           icon="rocket"
           color="rose"
+          todoPrefix="上线："
           items={todayTasks.publish.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
           doneItems={todayTasks.publishDone.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
+          onMakeTodo={(it) => onAddTodo(`上线：${it.name}`, today, { requirementId: it.id })}
         />
       </div>
 
@@ -275,6 +286,8 @@ export function TodoPanel({
                 onToggle={onToggleTodo}
                 onUpdate={onUpdateTodo}
                 onRemove={onRemoveTodo}
+                reqName={t.requirementId ? requirements.find((r) => r.id === t.requirementId)?.name : undefined}
+                onOpenRequirement={onOpenRequirement}
               />
             ))}
           </ul>
@@ -292,12 +305,18 @@ function TaskCard({
   color,
   items,
   doneItems = [],
+  todoPrefix,
+  onMakeTodo,
 }: {
   title: string
   icon: 'code' | 'flask' | 'rocket'
   color: 'blue' | 'amber' | 'rose'
   items: { id: string; name: string; project: string }[]
   doneItems?: { id: string; name: string; project: string }[]
+  /** 「+ 待办」生成的内容前缀，如「开发：」「提测：」「上线：」 */
+  todoPrefix?: string
+  /** hover 出现「+ 待办」按钮，一键生成关联待办 */
+  onMakeTodo?: (it: { id: string; name: string }) => void
 }) {
   const palette = {
     blue: 'bg-blue-500',
@@ -343,11 +362,22 @@ function TaskCard({
       ) : (
         <ul className="space-y-1.5">
           {items.map((it) => (
-            <li key={it.id} className="break-words text-sm text-slate-700 dark:text-slate-200">
-              <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle" />
-              {it.name}
-              {it.project && (
-                <span className="ml-1 text-xs text-slate-400">· {it.project}</span>
+            <li key={it.id} className="group/item flex items-start gap-1 break-words text-sm text-slate-700 dark:text-slate-200">
+              <span className="mt-1.5 mr-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 align-middle" />
+              <span className="min-w-0 flex-1">
+                {it.name}
+                {it.project && (
+                  <span className="ml-1 text-xs text-slate-400">· {it.project}</span>
+                )}
+              </span>
+              {onMakeTodo && todoPrefix && (
+                <button
+                  onClick={() => onMakeTodo(it)}
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-blue-600 opacity-0 transition hover:bg-blue-50 group-hover/item:opacity-100 dark:text-blue-400 dark:hover:bg-blue-500/15"
+                  title={`生成待办「${todoPrefix}${it.name}」`}
+                >
+                  + 待办
+                </button>
               )}
             </li>
           ))}

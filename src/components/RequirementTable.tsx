@@ -51,6 +51,10 @@ interface Props {
   onStatusChange: (id: string, status: RequirementStatus) => void
   /** 搜索框 ref，供全局快捷键 / 聚焦 */
   searchInputRef?: React.Ref<HTMLInputElement>
+  /** 外部请求打开某个需求的抽屉（如待办关联需求跳转）；变化时触发 */
+  externalOpenId?: string | null
+  /** externalOpenId 消费后回调（供外层清除状态） */
+  onExternalOpened?: () => void
 }
 
 /** 时间列展示顺序：创建 / 开发开始 / 开发结束 / 提测 / 上线 */
@@ -107,6 +111,8 @@ export function RequirementTable({
   onBatchDelete,
   onStatusChange,
   searchInputRef,
+  externalOpenId,
+  onExternalOpened,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
     const v = readUrlParam('status', 'all')
@@ -130,6 +136,13 @@ export function RequirementTable({
   })
   const [drawerId, setDrawerId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // 外部请求打开抽屉（待办关联需求跳转）：externalOpenId 变化时消费
+  useEffect(() => {
+    if (!externalOpenId) return
+    setDrawerId(externalOpenId)
+    onExternalOpened?.()
+  }, [externalOpenId, onExternalOpened])
   // 批量选择：默认关闭，点「批量」开关后才展示复选框
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
