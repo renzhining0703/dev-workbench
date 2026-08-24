@@ -343,16 +343,16 @@ function TaskCard({
   }[icon]
 
   return (
-    <div className="card p-4">
+    <div className="card flex flex-col p-4">
       <div className="mb-3 flex items-center gap-2">
-        <span className={`flex h-6 w-6 items-center justify-center rounded-md ${palette} text-white`}>
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${palette} text-white`}>
           {icons}
         </span>
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <h4 className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           {title}
         </h4>
         {items.length > 0 && (
-          <span className={`ml-auto rounded-full ${palette} px-2 py-0.5 text-xs font-bold text-white`}>
+          <span className={`shrink-0 rounded-full ${palette} px-2 py-0.5 text-xs font-bold text-white`}>
             {items.length}
           </span>
         )}
@@ -360,11 +360,11 @@ function TaskCard({
       {items.length === 0 && doneItems.length === 0 ? (
         <p className="py-3 text-center text-xs text-slate-400 dark:text-slate-500">暂无</p>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="max-h-[220px] space-y-1.5 overflow-y-auto pr-1">
           {items.map((it) => (
-            <li key={it.id} className="group/item flex items-start gap-1 break-words text-sm text-slate-700 dark:text-slate-200">
+            <li key={it.id} className="group/item flex items-center gap-1 text-sm text-slate-700 dark:text-slate-200">
               <span className="mt-1.5 mr-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 align-middle" />
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0 flex-1 truncate" title={it.name}>
                 {it.name}
                 {it.project && (
                   <span className="ml-1 text-xs text-slate-400">· {it.project}</span>
@@ -373,7 +373,7 @@ function TaskCard({
               {onMakeTodo && todoPrefix && (
                 <button
                   onClick={() => onMakeTodo(it)}
-                  className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-blue-600 opacity-0 transition hover:bg-blue-50 group-hover/item:opacity-100 dark:text-blue-400 dark:hover:bg-blue-500/15"
+                  className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-blue-600 opacity-100 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/15 sm:opacity-0 sm:group-hover/item:opacity-100"
                   title={`生成待办「${todoPrefix}${it.name}」`}
                 >
                   + 待办
@@ -382,12 +382,14 @@ function TaskCard({
             </li>
           ))}
           {doneItems.map((it) => (
-            <li key={`done-${it.id}`} className="break-words text-sm text-slate-400 line-through dark:text-slate-500">
-              <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" />
-              {it.name}
-              {it.project && (
-                <span className="ml-1 text-xs">· {it.project}</span>
-              )}
+            <li key={`done-${it.id}`} className="flex items-center gap-1 text-sm text-slate-400 line-through dark:text-slate-500">
+              <span className="mr-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 align-middle" />
+              <span className="min-w-0 flex-1 truncate" title={it.name}>
+                {it.name}
+                {it.project && (
+                  <span className="ml-1 text-xs">· {it.project}</span>
+                )}
+              </span>
             </li>
           ))}
         </ul>

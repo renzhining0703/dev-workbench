@@ -102,31 +102,33 @@ export function TodoRow({
           aria-label="编辑待办内容"
         />
       ) : (
-        <span
-          className={`flex-1 cursor-text select-none text-sm ${
-            todo.done
-              ? 'text-slate-400 line-through dark:text-slate-500'
-              : muted
-                ? 'text-slate-500 dark:text-slate-400'
-                : 'text-slate-700 dark:text-slate-200'
-          }`}
-          onDoubleClick={startEdit}
-          title="双击编辑"
-        >
-          {todo.content}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            className={`min-w-0 flex-1 cursor-text select-none truncate text-sm ${
+              todo.done
+                ? 'text-slate-400 line-through dark:text-slate-500'
+                : muted
+                  ? 'text-slate-500 dark:text-slate-400'
+                  : 'text-slate-700 dark:text-slate-200'
+            }`}
+            onDoubleClick={startEdit}
+            title={todo.content}
+          >
+            {todo.content}
+          </span>
           {todo.done && doneTime && (
-            <span className="ml-2 select-none text-xs text-slate-400 dark:text-slate-500">
+            <span className="shrink-0 select-none text-xs text-slate-400 dark:text-slate-500">
               {doneTime} 完成
             </span>
           )}
-        </span>
+        </div>
       )}
 
       {/* 关联需求 chip（点击跳回需求抽屉） */}
       {!editing && reqName && todo.requirementId && (
         <button
           onClick={() => onOpenRequirement?.(todo.requirementId!)}
-          className="max-w-[180px] shrink-0 truncate rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25"
+          className="max-w-[90px] shrink-0 truncate rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25 sm:max-w-[160px]"
           title={`打开需求「${reqName}」`}
         >
           🔗 {reqName}
