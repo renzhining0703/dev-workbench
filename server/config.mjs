@@ -13,8 +13,48 @@
  * - RATE_LIMIT_PER_MIN: /api/auth/* 每 IP 每分钟请求上限（默认 20）
  * - ALLOWED_ORIGINS: 逗号分隔的允许 origin 列表
  *
+ * ## 密钥类变量（INVITE_CODE 等）的持久化注入
+ *
+ * publish.sh 部署时远端执行 `pm2 reload --update-env`（非交互 shell），
+ * 会清掉手动注入的 CLI 环境变量；ecosystem.config.cjs 又随部署包被覆盖。
+ * 唯一跨部署保留的目录是 data/，因此支持 `<DATA_DIR>env.local`（KEY=VALUE 每行一条，
+ * '#' 开头为注释），进程环境变量优先级更高。建议 chmod 600 且不进 git。
+ *
  * loadConfig(env) 接受显式 env，便于测试注入。
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+/** 解析 KEY=VALUE 行（忽略空行与 # 注释），返回平面对象 */
+function parseEnvFile(raw) {
+  const out = {}
+  for (const line of raw.split('\n')) {
+    const s = line.trim()
+    if (!s || s.startsWith('#')) continue
+    const eq = s.indexOf('=')
+    if (eq <= 0) continue
+    const key = s.slice(0, eq).trim()
+    const val = s.slice(eq + 1).trim().replace(/^["']|["']$/g, '')
+    if (key) out[key] = val
+  }
+  return out
+}
+
+/**
+ * 合并后的运行环境：{ ...<DATA_DIR>env.local 文件, ...process.env }
+ * 文件不存在/不可读时静默退化为纯 process.env（本地开发零配置）。
+ */
+export function loadServerEnv(env = process.env) {
+  const dataDir = (env.DATA_DIR && env.DATA_DIR.length > 0
+    ? env.DATA_DIR
+    : new URL('./data/', import.meta.url).pathname)
+  try {
+    const fileEnv = parseEnvFile(readFileSync(resolve(dataDir, 'env.local'), 'utf8'))
+    return { ...fileEnv, ...env }
+  } catch {
+    return env
+  }
+}
 function envOrDefault(env, name, fallback) {
   const v = env[name]
   return v && v.length > 0 ? v : fallback

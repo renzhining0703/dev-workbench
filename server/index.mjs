@@ -14,7 +14,7 @@
  * 启动：node index.mjs（建议 --no-warnings 静默 node:sqlite 实验性提示）
  * 或 pm2 start ecosystem.config.cjs
  */
-import { loadConfig } from './config.mjs'
+import { loadConfig, loadServerEnv } from './config.mjs'
 import { openDatabase } from './db.mjs'
 import { UserStore } from './store/users.mjs'
 import { SessionStore } from './store/sessions.mjs'
@@ -22,7 +22,7 @@ import { SnapshotStore } from './store/snapshots.mjs'
 import { createApp } from './app.mjs'
 import { runStartup } from './startup.mjs'
 
-const config = loadConfig()
+const config = loadConfig(loadServerEnv())
 const db = openDatabase(config.dbFile)
 const userStore = new UserStore(db)
 const sessionStore = new SessionStore(db)
