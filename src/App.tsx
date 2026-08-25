@@ -178,6 +178,19 @@ function AppInner({
   )
   const [notifyToast, setNotifyToast] = useState<{ tone: 'ok' | 'warn'; title: string; desc?: string } | null>(null)
   const notifyToastTimerRef = useRef<number | null>(null)
+  // 更多操作下拉外点关闭：header 有 backdrop-blur（backdrop-filter 会为 fixed 后代建 containing block），
+  // fixed 关闭层实际只覆盖 header 高度，点击页面内容关不掉菜单，故改用 window mousedown + ref 判定
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setMobileMenuOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [mobileMenuOpen])
 
   // 首次启动自动导入：本地无任何需求且从未导入过时，自动载入 public/import-data.json
   // 注：sync 已经在 mount 时跑了一次 pull（覆盖本地），所以这里的判断基于已被同步覆盖后的本地
@@ -511,11 +524,10 @@ function AppInner({
                 <path d="M12 5v14M5 12h14" />
               </svg>
               <span className="hidden sm:inline">新建需求</span>
-              <kbd className="hidden rounded bg-white/20 px-1 py-0.5 text-[10px] font-medium lg:inline">N</kbd>
             </button>
 
             {/* 更多操作下拉 */}
-            <div className="relative">
+            <div className="relative" ref={mobileMenuRef}>
               <button
                 onClick={() => setMobileMenuOpen((v) => !v)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 sm:h-9 sm:w-9"
@@ -531,10 +543,6 @@ function AppInner({
 
               {mobileMenuOpen && (
                 <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setMobileMenuOpen(false)}
-                  />
                   <div className="absolute right-0 top-full z-50 mt-1.5 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
                     <button
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"

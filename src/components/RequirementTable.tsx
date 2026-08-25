@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Requirement, RequirementStatus } from '../types'
 import { STATUS_FLOW, statusMeta } from '../types'
-import { copyToClipboard, exportCsv, fmtDate, fmtDateShort, isDateToday } from '../lib/utils'
+import { copyToClipboard, exportCsv, fmtDate, fmtDateShort, isDateToday, toDateStr } from '../lib/utils'
 import { highlight } from '../lib/highlight'
 import {
   requirementModuleDisplay,
@@ -67,7 +67,33 @@ const TIME_FIELDS: { key: keyof Requirement; label: string }[] = [
 ]
 
 /**
- * 时间单元格：所有时间点合并为一列、一行内联展示（不换行）。
+ * 提测到期徽标：到了/超过提测日但状态还没进测试（待开发/开发中）时，
+ * 在需求名称下方显示醒目提示 —— 不用横向滚动到时间列就能看到。
+ */
+function TestDueBadge({ r }: { r: Requirement }) {
+  const today = toDateStr(new Date())
+  if (!r.testTime) return null
+  if (r.status !== 'pending' && r.status !== 'developing') return null
+  if (r.testTime > today) return null
+
+  let label: string
+  let cls: string
+  if (r.testTime === today) {
+    label = '⏰ 今日提测'
+    cls = 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+  } else {
+    const days = Math.max(1, Math.round((Date.parse(today) - Date.parse(r.testTime)) / 86400000))
+    label = `⏰ 提测超期 ${days} 天`
+    cls = 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400'
+  }
+  return (
+    <div className="mt-1">
+      <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
+    </div>
+  )
+}
+
+/** 时间单元格：所有时间点合并为一列、一行内联展示（不换行）。
  * 空值自动跳过；全部为空时显示 —；今天的日期高亮。
  * wrap 为 true 时（移动端卡片）允许折行。
  */
@@ -737,6 +763,7 @@ export function RequirementTable({
                             {highlight(r.remark, keyword)}
                           </div>
                         )}
+                        <TestDueBadge r={r} />
                       </td>
                       <td className="min-w-[240px] px-4 py-3">
                         <div className="flex max-w-[240px] flex-wrap items-center gap-1">
@@ -1032,6 +1059,7 @@ function RequirementCard({
           {highlight(r.remark, keyword)}
         </div>
       )}
+      <TestDueBadge r={r} />
 
       {/* 项目 / 分支 / 模块 */}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">

@@ -136,13 +136,25 @@ export function TodoPanel({
   // 今日节点（按开发开始/提测/上线时间聚合）
   const todayTasks = useMemo(() => {
     const dev = requirements.filter((r) => isDateToday(r.devStartTime) && r.status === 'developing')
-    const test = requirements.filter((r) => isDateToday(r.testTime) && r.status === 'testing')
+    // 今日开发中：处于开发中、且不是今天才开始（今天开始的在「今日开始开发」卡片，避免重复）
+    const developing = requirements.filter(
+      (r) => r.status === 'developing' && !isDateToday(r.devStartTime),
+    )
     const publish = requirements.filter(
       (r) => isDateToday(r.publishTime) && r.status !== 'published' && r.status !== 'archived',
     )
     const publishDone = requirements.filter((r) => isDateToday(r.publishTime) && r.status === 'published')
-    return { dev, test, publish, publishDone }
+    return { dev, developing, publish, publishDone }
   }, [requirements])
+
+  // 今日已生成待办的需求 id 集合：任务卡片据此把「+ 待办」换成「✓ 已在今日待办」
+  const addedTodoReqIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const t of todos) {
+      if (t.requirementId && t.date === today) ids.add(t.requirementId)
+    }
+    return ids
+  }, [todos, today])
 
   const submit = () => {
     const content = input.trim()
@@ -161,15 +173,17 @@ export function TodoPanel({
           color="blue"
           todoPrefix="开发："
           items={todayTasks.dev.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
+          addedReqIds={addedTodoReqIds}
           onMakeTodo={(it) => onAddTodo(`开发：${it.name}`, today, { requirementId: it.id })}
         />
         <TaskCard
-          title="今日待提测"
-          icon="flask"
-          color="amber"
-          todoPrefix="提测："
-          items={todayTasks.test.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
-          onMakeTodo={(it) => onAddTodo(`提测：${it.name}`, today, { requirementId: it.id })}
+          title="今日开发中"
+          icon="wrench"
+          color="violet"
+          todoPrefix="开发："
+          items={todayTasks.developing.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
+          addedReqIds={addedTodoReqIds}
+          onMakeTodo={(it) => onAddTodo(`开发：${it.name}`, today, { requirementId: it.id })}
         />
         <TaskCard
           title="今日上线"
@@ -178,6 +192,7 @@ export function TodoPanel({
           todoPrefix="上线："
           items={todayTasks.publish.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
           doneItems={todayTasks.publishDone.map((r) => ({ id: r.id, name: r.name, project: requirementProjectDisplay(r) }))}
+          addedReqIds={addedTodoReqIds}
           onMakeTodo={(it) => onAddTodo(`上线：${it.name}`, today, { requirementId: it.id })}
         />
       </div>
@@ -306,20 +321,24 @@ function TaskCard({
   items,
   doneItems = [],
   todoPrefix,
+  addedReqIds,
   onMakeTodo,
 }: {
   title: string
-  icon: 'code' | 'flask' | 'rocket'
-  color: 'blue' | 'amber' | 'rose'
+  icon: 'code' | 'wrench' | 'flask' | 'rocket'
+  color: 'blue' | 'violet' | 'amber' | 'rose'
   items: { id: string; name: string; project: string }[]
   doneItems?: { id: string; name: string; project: string }[]
   /** 「+ 待办」生成的内容前缀，如「开发：」「提测：」「上线：」 */
   todoPrefix?: string
+  /** 今日已生成待办的需求 id 集合（命中则显示「✓ 已在今日待办」而非「+ 待办」） */
+  addedReqIds?: Set<string>
   /** hover 出现「+ 待办」按钮，一键生成关联待办 */
   onMakeTodo?: (it: { id: string; name: string }) => void
 }) {
   const palette = {
     blue: 'bg-blue-500',
+    violet: 'bg-violet-500',
     amber: 'bg-amber-500',
     rose: 'bg-rose-500',
   }[color]
@@ -328,6 +347,11 @@ function TaskCard({
     code: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />
+      </svg>
+    ),
+    wrench: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
       </svg>
     ),
     flask: (
@@ -370,7 +394,14 @@ function TaskCard({
                   <span className="ml-1 text-xs text-slate-400">· {it.project}</span>
                 )}
               </span>
-              {onMakeTodo && todoPrefix && (
+              {onMakeTodo && todoPrefix && (addedReqIds?.has(it.id) ? (
+                <span
+                  className="shrink-0 select-none text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+                  title="该需求今日已生成待办"
+                >
+                  ✓ 已在今日待办
+                </span>
+              ) : (
                 <button
                   onClick={() => onMakeTodo(it)}
                   className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-blue-600 opacity-100 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/15 sm:opacity-0 sm:group-hover/item:opacity-100"
@@ -378,7 +409,7 @@ function TaskCard({
                 >
                   + 待办
                 </button>
-              )}
+              ))}
             </li>
           ))}
           {doneItems.map((it) => (
