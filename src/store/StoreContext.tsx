@@ -23,7 +23,7 @@ import {
 } from '../lib/storage'
 import { getArchiveMonths, setArchiveMonths as persistArchiveMonths } from '../lib/archive'
 import type { MigratedRequirement } from '../lib/migrate'
-import { mergeByUpdatedAt } from '../lib/sync'
+import { mergeByUpdatedAt } from '../lib/merge'
 import { active, gcTombstones } from '../lib/tombstone'
 
 /** 同步触发器：由外部（App 层 startSync）注入；mutation 后调用 */

@@ -63,30 +63,7 @@ interface Options {
 }
 
 /* ---------------- 合并 ---------------- */
-
-type WithTime = { id: string; updatedAt?: string; createdAt?: string }
-
-function timeOf(x: WithTime): number {
-  const t = x.updatedAt ?? x.createdAt ?? ''
-  const n = new Date(t).getTime()
-  return Number.isFinite(n) ? n : 0
-}
-
-export function mergeByUpdatedAt<T extends WithTime>(remote: T[], local: T[]): T[] {
-  const byId = new Map<string, T>()
-  const remoteIds = new Set(remote.map((r) => r.id))
-
-  for (const r of remote) byId.set(r.id, r)
-  for (const l of local) {
-    if (!remoteIds.has(l.id)) {
-      byId.set(l.id, l)
-      continue
-    }
-    const r = byId.get(l.id)!
-    if (timeOf(l) > timeOf(r)) byId.set(l.id, l)
-  }
-  return [...byId.values()]
-}
+/* mergeByUpdatedAt 已抽到 src/lib/merge.ts（纯函数，零 DOM 依赖，便于单测） */
 
 /* ---------------- HTTP ---------------- */
 
