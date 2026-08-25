@@ -114,7 +114,7 @@ describe('buildTodoSummary', () => {
 })
 
 describe('collectTodoReqIds', () => {
-  it('昨日生成、未完成的待办也计入（回归：跨天不重复显示 +待办）', () => {
+  it('昨日生成、未完成的待办计入（回归：跨天不重复显示 +待办）', () => {
     const todos = [
       makeTodo({ id: 'ovd', date: yesterday, requirementId: 'r1' }),
       makeTodo({ id: 'today', date: today, requirementId: 'r2' }),
@@ -122,10 +122,22 @@ describe('collectTodoReqIds', () => {
     expect(collectTodoReqIds(todos, today)).toEqual(new Set(['r1', 'r2']))
   })
 
-  it('已完成的待办不计入（完成后允许重新生成）', () => {
+  it('今日生成、已完成的待办仍计入（回归：完成后不应变回 +待办）', () => {
+    const todos = [makeTodo({ id: 'done-today', date: today, done: true, requirementId: 'r1' })]
+    expect(collectTodoReqIds(todos, today)).toEqual(new Set(['r1']))
+  })
+
+  it('遗留待办在今天完成（completedAt=今天）仍计入', () => {
     const todos = [
-      makeTodo({ id: 'd1', date: yesterday, done: true, requirementId: 'r1' }),
-      makeTodo({ id: 'd2', date: today, done: true, requirementId: 'r2' }),
+      makeTodo({ id: 'closed-today', date: yesterday, done: true, completedAt: new Date().toISOString(), requirementId: 'r1' }),
+    ]
+    expect(collectTodoReqIds(todos, today)).toEqual(new Set(['r1']))
+  })
+
+  it('完成于今天之前的旧待办不计入（允许重新生成）', () => {
+    const todos = [
+      makeTodo({ id: 'd1', date: yesterday, done: true, completedAt: '2020-01-01T00:00:00.000Z', requirementId: 'r1' }),
+      makeTodo({ id: 'd2', date: yesterday, done: true, requirementId: 'r2' }),
     ]
     expect(collectTodoReqIds(todos, today)).toEqual(new Set())
   })
