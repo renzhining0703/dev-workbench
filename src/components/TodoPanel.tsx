@@ -147,9 +147,9 @@ export function TodoPanel({
     return { dev, developing, publish, publishDone }
   }, [requirements])
 
-  // 已有待办的需求 id 集合：今日待办 + 未完成的遗留待办都算，
-  // 避免昨日生成、今日未完成的待办在卡片上重新出现「+ 待办」并被重复生成
-  const addedTodoReqIds = useMemo(() => collectTodoReqIds(todos, today), [todos, today])
+  // 已有待办的需求 id 集合：存在过任何关联待办（不限日期/完成状态）就算，
+  // 卡片显示「✓ 已有待办」，避免重复生成（已完成的需求不需要再生成待办）
+  const addedTodoReqIds = useMemo(() => collectTodoReqIds(todos), [todos])
 
   const submit = () => {
     const content = input.trim()

@@ -38,28 +38,19 @@ export function sortTodos(list: TodoItem[]): TodoItem[] {
 
 /**
  * 已有待办的需求 id 集合，任务卡片据此把「+ 待办」换成「✓ 已有待办」。
- * 计入规则（任一命中即算）：
- * 1. 今日生成过的待办（无论是否已完成）——今天已加过，不应重复生成；
- * 2. 未完成的遗留待办（date < today 且未完成）——昨日生成、今天还没做完；
- * 3. 今天完成的遗留待办（completedAt 为今天）——刚被处理完，也属于今天的上下文。
- * 只有「完成于今天之前」的旧待办才不计入，允许重新生成。
+ * 规则：只要该需求存在过任何关联待办（不限日期、不限完成状态）即计入——
+ * 已完成的需求不需要再生成待办，避免重复创建。
  */
-export function collectTodoReqIds(todos: TodoItem[], today: string): Set<string> {
+export function collectTodoReqIds(todos: TodoItem[]): Set<string> {
   const ids = new Set<string>()
   for (const t of todos) {
-    if (!t.requirementId) continue
-    if (t.date === today) {
-      ids.add(t.requirementId)
-    } else if (!t.done && t.date < today) {
-      ids.add(t.requirementId)
-    } else if (t.done && (t.completedAt ?? '').slice(0, 10) === today) {
-      ids.add(t.requirementId)
-    }
+    if (t.requirementId) ids.add(t.requirementId)
   }
   return ids
 }
 
-/** 今日汇总：未完成数 / 其中高优先级数 / 昨日遗留数 */export function buildTodoSummary(todos: TodoItem[]) {
+/** 今日汇总：未完成数 / 其中高优先级数 / 昨日遗留数 */
+export function buildTodoSummary(todos: TodoItem[]) {
   const today = toDateStr(new Date())
   let undone = 0
   let high = 0
