@@ -47,7 +47,7 @@ export function PublishReminder({ requirements }: { requirements: Requirement[] 
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       for (const r of dueList) {
         new Notification(`🔔 ${r.name} 今日上线`, {
-          body: `${requirementProjectDisplay(r) ? requirementProjectDisplay(r) + ' / ' : ''}${requirementModuleDisplay(r) ? '发布模块 ' + requirementModuleDisplay(r) : '全量发布'}`,
+          body: `${requirementProjectDisplay(r) ? requirementProjectDisplay(r) + ' / ' : ''}${r.branch ? '分支 ' + r.branch + ' · ' : ''}${requirementModuleDisplay(r) ? '发布模块 ' + requirementModuleDisplay(r) : '全量发布'}`,
           tag: `publish-${r.id}-${today}`,
         })
       }
@@ -72,6 +72,11 @@ export function PublishReminder({ requirements }: { requirements: Requirement[] 
           {dueList.map((r) => (
             <li key={r.id} className="text-sm text-rose-600 dark:text-rose-400">
               「{r.name}」今日上线
+              {r.branch && (
+                <span className="ml-1.5 rounded bg-rose-100 px-1.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
+                  分支：{r.branch}
+                </span>
+              )}
               {requirementModuleDisplay(r) && (
                 <span className="ml-1.5 rounded bg-rose-100 px-1.5 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
                   发布模块：{requirementModuleDisplay(r)}
@@ -392,7 +397,7 @@ function TaskCard({
               {onMakeTodo && todoPrefix && (addedReqIds?.has(it.id) ? (
                 <span
                   className="shrink-0 select-none text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
-                  title="该需求已有未完成待办（今日或遗留）"
+                  title="该需求已生成过待办，无需重复添加"
                 >
                   ✓ 已有待办
                 </span>
