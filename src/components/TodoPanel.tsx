@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Requirement, TodoItem } from '../types'
 import { isDateToday, toDateStr } from '../lib/utils'
 import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
-import { sortTodos } from '../lib/todos'
+import { collectTodoReqIds, sortTodos } from '../lib/todos'
 import { TodoRow } from './TodoRow'
 
 /* ---------------- 今日上线提醒 ---------------- */
@@ -147,14 +147,9 @@ export function TodoPanel({
     return { dev, developing, publish, publishDone }
   }, [requirements])
 
-  // 今日已生成待办的需求 id 集合：任务卡片据此把「+ 待办」换成「✓ 已在今日待办」
-  const addedTodoReqIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const t of todos) {
-      if (t.requirementId && t.date === today) ids.add(t.requirementId)
-    }
-    return ids
-  }, [todos, today])
+  // 已有待办的需求 id 集合：今日待办 + 未完成的遗留待办都算，
+  // 避免昨日生成、今日未完成的待办在卡片上重新出现「+ 待办」并被重复生成
+  const addedTodoReqIds = useMemo(() => collectTodoReqIds(todos, today), [todos, today])
 
   const submit = () => {
     const content = input.trim()
@@ -331,7 +326,7 @@ function TaskCard({
   doneItems?: { id: string; name: string; project: string }[]
   /** 「+ 待办」生成的内容前缀，如「开发：」「提测：」「上线：」 */
   todoPrefix?: string
-  /** 今日已生成待办的需求 id 集合（命中则显示「✓ 已在今日待办」而非「+ 待办」） */
+  /** 已有待办（今日或未完成遗留）的需求 id 集合（命中则显示「✓ 已有待办」而非「+ 待办」） */
   addedReqIds?: Set<string>
   /** hover 出现「+ 待办」按钮，一键生成关联待办 */
   onMakeTodo?: (it: { id: string; name: string }) => void
@@ -397,9 +392,9 @@ function TaskCard({
               {onMakeTodo && todoPrefix && (addedReqIds?.has(it.id) ? (
                 <span
                   className="shrink-0 select-none text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
-                  title="该需求今日已生成待办"
+                  title="该需求已有未完成待办（今日或遗留）"
                 >
-                  ✓ 已在今日待办
+                  ✓ 已有待办
                 </span>
               ) : (
                 <button

@@ -7,6 +7,7 @@ import {
   priorityOf,
   nextPriority,
   buildTodoSummary,
+  collectTodoReqIds,
   PRIORITY_META,
 } from '../todos'
 import { toDateStr } from '../utils'
@@ -109,5 +110,36 @@ describe('buildTodoSummary', () => {
 
   it('空列表归零', () => {
     expect(buildTodoSummary([])).toEqual({ undone: 0, high: 0, overdue: 0 })
+  })
+})
+
+describe('collectTodoReqIds', () => {
+  it('昨日生成、未完成的待办也计入（回归：跨天不重复显示 +待办）', () => {
+    const todos = [
+      makeTodo({ id: 'ovd', date: yesterday, requirementId: 'r1' }),
+      makeTodo({ id: 'today', date: today, requirementId: 'r2' }),
+    ]
+    expect(collectTodoReqIds(todos, today)).toEqual(new Set(['r1', 'r2']))
+  })
+
+  it('已完成的待办不计入（完成后允许重新生成）', () => {
+    const todos = [
+      makeTodo({ id: 'd1', date: yesterday, done: true, requirementId: 'r1' }),
+      makeTodo({ id: 'd2', date: today, done: true, requirementId: 'r2' }),
+    ]
+    expect(collectTodoReqIds(todos, today)).toEqual(new Set())
+  })
+
+  it('未来预排的待办不计入（与今日卡片无关）', () => {
+    const todos = [makeTodo({ id: 'future', date: '2099-01-01', requirementId: 'r1' })]
+    expect(collectTodoReqIds(todos, today)).toEqual(new Set())
+  })
+
+  it('无 requirementId 的普通待办不影响集合', () => {
+    const todos = [
+      makeTodo({ id: 'plain' }),
+      makeTodo({ id: 'linked', date: yesterday, requirementId: 'r1' }),
+    ]
+    expect(collectTodoReqIds(todos, today)).toEqual(new Set(['r1']))
   })
 })

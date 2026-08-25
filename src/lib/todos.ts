@@ -36,8 +36,19 @@ export function sortTodos(list: TodoItem[]): TodoItem[] {
   })
 }
 
-/** 今日汇总：未完成数 / 其中高优先级数 / 昨日遗留数 */
-export function buildTodoSummary(todos: TodoItem[]) {
+/**
+ * 已有待办的需求 id 集合：今日待办 + 未完成的遗留待办（date ≤ today 且未完成）都算。
+ * 任务卡片据此把「+ 待办」换成「✓ 已有待办」，避免昨日生成、今日未完成的待办被重复生成。
+ */
+export function collectTodoReqIds(todos: TodoItem[], today: string): Set<string> {
+  const ids = new Set<string>()
+  for (const t of todos) {
+    if (!t.done && t.requirementId && t.date <= today) ids.add(t.requirementId)
+  }
+  return ids
+}
+
+/** 今日汇总：未完成数 / 其中高优先级数 / 昨日遗留数 */export function buildTodoSummary(todos: TodoItem[]) {
   const today = toDateStr(new Date())
   let undone = 0
   let high = 0
