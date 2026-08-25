@@ -23,5 +23,19 @@ module.exports = {
       DATA_DIR: __dirname + '/data/',
     },
     max_memory_restart: '128M',
+  }, {
+    // 每日 03:17 自动备份 SQLite 到 data/backups/，保留最近 7 份
+    // autorestart:false —— 跑完即退，pm2 不重启，cron 到点再起一次
+    name: 'dev-workbench-backup',
+    script: './scripts/backup-db.mjs',
+    node_args: '--no-warnings',
+    cwd: __dirname,
+    instances: 1,
+    exec_mode: 'fork',
+    autorestart: false,
+    cron: '17 3 * * *',
+    env: {
+      DATA_DIR: __dirname + '/data/',
+    },
   }],
 }

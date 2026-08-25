@@ -141,7 +141,10 @@ ssh "$SERVER" "
   if [ -f '$SYNC_REMOTE_DIR/ecosystem.config.cjs' ]; then
     cd '$SYNC_REMOTE_DIR'
     command -v pm2 >/dev/null || npm install -g pm2
-    pm2 reload ecosystem.config.cjs --update-env 2>/dev/null || pm2 start ecosystem.config.cjs
+    # 主服务：热重载（零停机）；未运行则 start
+    pm2 reload dev-workbench-sync --update-env 2>/dev/null || pm2 start ecosystem.config.cjs --only dev-workbench-sync
+    # 每日备份 cron 任务：reload 不拉起已退出的 cron 进程，按需 start（已在运行则忽略错误）
+    pm2 start ecosystem.config.cjs --only dev-workbench-backup 2>/dev/null || true
     pm2 save 2>/dev/null || true
   fi
 "
