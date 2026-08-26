@@ -11,6 +11,7 @@ import { PublishReminder, TodoPanel } from './components/TodoPanel'
 import { TodoView } from './components/TodoView'
 import { TodayHero } from './components/TodayHero'
 import { TodoSummaryReminder } from './components/TodoSummaryReminder'
+import { Logo } from './components/Logo'
 import { ExportModal } from './components/ExportModal'
 import { ImportModal } from './components/ImportModal'
 import { BackupModal } from './components/BackupModal'
@@ -427,9 +428,7 @@ function AppInner({
         <div className="wb-header-inner">
           <div className="wb-logo">
             <div className="wb-logo-mark">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M4 6h16M4 12h16M4 18h10" />
-              </svg>
+              <Logo size={20} title="开发工作台" />
             </div>
             <div>
               <div className="wb-logo-name">开发工作台</div>

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../store/AuthContext'
 import { authApi, AuthError } from '../lib/authClient'
+import { Logo } from './Logo'
 
 /**
  * 独立认证页（全屏，NOVA 设计稿还原：左侧品牌面板 + 右侧表单面板）
@@ -246,10 +247,7 @@ export function AuthPage() {
         <div className="auth-brand-inner">
           <div className="auth-brand-logo">
             <span className="auth-brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="6" width="20" height="12" rx="2" />
-                <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
-              </svg>
+              <Logo size={22} />
             </span>
             <span className="auth-brand-name">开发工作台</span>
           </div>
