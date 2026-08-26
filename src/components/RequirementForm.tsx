@@ -161,9 +161,9 @@ export function RequirementFormModal({
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="label">需求名称 *</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>需求名称 *</label>
           <input
-            className="input"
+            className="wb-input"
             placeholder="如：首页改版 - 登录态优化"
             value={draft.name}
             onChange={(e) => set('name', e.target.value)}
@@ -172,9 +172,9 @@ export function RequirementFormModal({
         </div>
 
         <div className="sm:col-span-2">
-          <label className="label">
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
             所属项目
-            <span className="ml-1 text-xs text-slate-400">一个需求可关联多个项目，各自指定发布方式</span>
+            <span className="ml-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>一个需求可关联多个项目，各自指定发布方式</span>
           </label>
           <div className="space-y-2">
             {draft.projects.map((ref) => {
@@ -182,26 +182,27 @@ export function RequirementFormModal({
               return (
                 <div
                   key={ref.project}
-                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 dark:border-slate-700"
+                  className="flex items-center gap-2 rounded-lg border border-[var(--wb-line)] px-2.5 py-1.5"
                 >
-                  <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <span className="shrink-0 rounded-md bg-[var(--wb-surface-2)] px-2 py-0.5 text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
                     {ref.project}
                   </span>
                   {moduleBased ? (
                     <input
-                      className="input h-8 flex-1 py-1 text-xs"
+                      className="wb-input h-8 flex-1 py-1 text-xs"
                       placeholder="发布模块，如 make/（留空 = 全量）"
                       value={ref.publishModule}
                       onChange={(e) => setProjectModule(ref.project, e.target.value)}
                     />
                   ) : (
-                    <span className="flex-1 text-xs text-slate-400 dark:text-slate-500">
+                    <span className="flex-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
                       全量发布
                     </span>
                   )}
                   <button
                     type="button"
-                    className="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-rose-500 dark:hover:bg-slate-800"
+                    className="shrink-0 rounded-md p-1 transition hover:bg-[var(--wb-surface-2)] hover:text-[var(--wb-danger)]"
+                    style={{ color: 'var(--wb-ink-3)' }}
                     title="移除该项目"
                     onClick={() => removeProjectRef(ref.project)}
                   >
@@ -225,7 +226,8 @@ export function RequirementFormModal({
             ) : (
               <button
                 type="button"
-                className="w-full rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs text-slate-500 transition hover:border-indigo-400 hover:text-indigo-500 dark:border-slate-600 dark:text-slate-400 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
+                className="w-full rounded-lg border border-dashed border-[var(--wb-line-2)] px-3 py-1.5 text-xs transition hover:border-[var(--wb-brand-400)] hover:text-[var(--wb-brand-500)]"
+                style={{ color: 'var(--wb-ink-2)' }}
                 disabled={projectOptions.length === 0}
                 onClick={() => setAddingProject(true)}
               >
@@ -234,26 +236,26 @@ export function RequirementFormModal({
               </button>
             )}
           </div>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
             选项来自「项目管理」，可到顶栏维护；项目是否支持分模块发布也在那里配置
           </p>
         </div>
 
         <div>
-          <label className="label">代码分支</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>代码分支</label>
           <input
-            className="input"
+            className="wb-input"
             placeholder="如：feature/login-optimize"
             value={draft.branch}
             onChange={(e) => set('branch', e.target.value)}
           />
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            新建时自动填入 <code className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800">feature/&lt;今日&gt;/REQ-</code>，可继续修改
+          <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+            新建时自动填入 <code className="rounded bg-[var(--wb-surface-2)] px-1 py-0.5">feature/&lt;今日&gt;/REQ-</code>，可继续修改
           </p>
         </div>
 
         <div>
-          <label className="label">当前状态</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>当前状态</label>
           <Select
             value={draft.status}
             onChange={(s) => set('status', s)}
@@ -262,59 +264,59 @@ export function RequirementFormModal({
         </div>
 
         <div>
-          <label className="label">创建时间</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>创建时间</label>
           <input
             type="date"
-            className="input"
+            className="wb-input"
             value={toDateInput(createdAtStr)}
             disabled
           />
         </div>
 
         <div>
-          <label className="label">开发开始时间</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>开发开始时间</label>
           <input
             type="date"
-            className="input"
+            className="wb-input"
             value={toDateInput(draft.devStartTime)}
             onChange={(e) => set("devStartTime", e.target.value || null)}
           />
         </div>
 
         <div>
-          <label className="label">开发结束时间</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>开发结束时间</label>
           <input
             type="date"
-            className="input"
+            className="wb-input"
             value={toDateInput(draft.devEndTime)}
             onChange={(e) => set("devEndTime", e.target.value || null)}
           />
         </div>
 
         <div>
-          <label className="label">提测时间</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>提测时间</label>
           <input
             type="date"
-            className="input"
+            className="wb-input"
             value={toDateInput(draft.testTime)}
             onChange={(e) => set("testTime", e.target.value || null)}
           />
         </div>
 
         <div>
-          <label className="label">上线时间</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>上线时间</label>
           <input
             type="date"
-            className="input"
+            className="wb-input"
             value={toDateInput(draft.publishTime)}
             onChange={(e) => set("publishTime", e.target.value || null)}
           />
         </div>
 
         <div className="sm:col-span-2">
-          <label className="label">备注</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>备注</label>
           <textarea
-            className="input min-h-[72px] resize-y"
+            className="wb-input min-h-[72px] resize-y"
             placeholder="补充说明（可选）"
             value={draft.remark}
             onChange={(e) => set('remark', e.target.value)}
@@ -323,8 +325,8 @@ export function RequirementFormModal({
       </div>
 
       <div className="mt-6 flex justify-end gap-2">
-        <button className="btn-ghost" onClick={onClose}>取消</button>
-        <button className="btn-primary" disabled={!valid} onClick={submit}>
+        <button className="wb-btn-ghost" onClick={onClose}>取消</button>
+        <button className="wb-btn-primary" disabled={!valid} onClick={submit}>
           {initial ? '保存修改' : '创建需求'}
         </button>
       </div>

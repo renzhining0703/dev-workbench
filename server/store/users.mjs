@@ -16,13 +16,16 @@ export class UserStore {
     this.db = db
     this._count = db.prepare('SELECT COUNT(*) AS n FROM users')
     this._get = db.prepare(
-      'SELECT username, pw_hash, salt, created_at, updated_at FROM users WHERE username = ?',
+      'SELECT username, nickname, pw_hash, salt, created_at, updated_at FROM users WHERE username = ?',
     )
     this._insert = db.prepare(
-      'INSERT INTO users (username, pw_hash, salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO users (username, nickname, pw_hash, salt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
     )
     this._setPassword = db.prepare(
       'UPDATE users SET pw_hash = ?, salt = ?, updated_at = ? WHERE username = ?',
+    )
+    this._setNickname = db.prepare(
+      'UPDATE users SET nickname = ?, updated_at = ? WHERE username = ?',
     )
     this._touch = db.prepare('UPDATE users SET updated_at = ? WHERE username = ?')
   }
@@ -35,12 +38,13 @@ export class UserStore {
     return this._get.get(username) != null
   }
 
-  /** 返回 { username, pwHashHex, saltHex, createdAt, updatedAt } | null */
+  /** 返回 { username, nickname, pwHashHex, saltHex, createdAt, updatedAt } | null */
   get(username) {
     const row = this._get.get(username)
     if (!row) return null
     return {
       username: row.username,
+      nickname: row.nickname || row.username,
       pwHashHex: row.pw_hash,
       saltHex: row.salt,
       createdAt: row.created_at,
@@ -50,13 +54,14 @@ export class UserStore {
 
   /**
    * 创建用户。返回 { ok: true, user } 或 { ok: false, error: 'taken' }
+   * nickname 缺省回退 username（兼容 bootstrap / 迁移 / 测试调用点）。
    * 主键冲突（并发/重复）→ taken，与 v1 语义一致。
    * node:sqlite 的约束错误：code='ERR_SQLITE_ERROR'，errstr 含 'UNIQUE constraint'
    */
-  create({ username, pwHashHex, saltHex }) {
+  create({ username, nickname, pwHashHex, saltHex }) {
     const now = new Date().toISOString()
     try {
-      this._insert.run(username, pwHashHex, saltHex, now, now)
+      this._insert.run(username, nickname || username, pwHashHex, saltHex, now, now)
     } catch (e) {
       const isConstraint =
         e?.code === 'ERR_SQLITE_ERROR' &&
@@ -68,6 +73,12 @@ export class UserStore {
       throw e
     }
     return { ok: true, user: this.get(username) }
+  }
+
+  /** 更新昵称；返回是否更新成功（用户不存在返回 false） */
+  setNickname(username, nickname) {
+    const r = this._setNickname.run(nickname, new Date().toISOString(), username)
+    return r.changes > 0
   }
 
   /** 更新密码 hash（CLI / 运维用） */

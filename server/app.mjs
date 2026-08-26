@@ -44,7 +44,7 @@ export function createApp({ config, userStore, sessionStore, snapshotStore }) {
   // ---- body 解析：4MB 上限；不看 content-type（v1 readJsonBody 对任何 body 尝试 JSON.parse）----
   app.use(express.json({ limit: '4mb', type: () => true }))
 
-  const auth = requireAuth({ sessions: sessionStore })
+  const auth = requireAuth({ sessions: sessionStore, userStore })
   app.use(
     '/api/auth',
     createAuthRouter({

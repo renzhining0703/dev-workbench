@@ -30,15 +30,16 @@ export function Modal({
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`card w-full ${width} my-8 max-h-[90vh] overflow-y-auto p-6`}
+        className={`wb-card w-full ${width} my-8 max-h-[90vh] overflow-y-auto p-6`}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--wb-ink)' }}>
             {title}
           </h3>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="rounded-lg p-1.5 transition"
+            style={{ color: 'var(--wb-ink-3)' }}
             aria-label="关闭"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -87,12 +88,12 @@ export function ConfirmDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
     >
-      <div className="card w-full max-w-sm p-6">
-        <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
-        <p className="mt-2 whitespace-pre-line text-sm text-slate-500 dark:text-slate-400">{message}</p>
+      <div className="wb-card w-full max-w-sm p-6">
+        <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--wb-ink)' }}>{title}</h3>
+        <p className="mt-2 whitespace-pre-line text-sm" style={{ color: 'var(--wb-ink-2)' }}>{message}</p>
         <div className="mt-5 flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onCancel}>{cancelLabel}</button>
-          <button className="btn-danger" onClick={onConfirm}>{confirmLabel}</button>
+          <button className="wb-btn-ghost" onClick={onCancel}>{cancelLabel}</button>
+          <button className="wb-btn-danger-soft" onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>,
@@ -114,7 +115,10 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-14 text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+      <div
+        className="mb-3 flex h-12 w-12 items-center justify-center rounded-full"
+        style={{ background: 'var(--wb-surface-2)', color: 'var(--wb-ink-3)' }}
+      >
         {icon ?? (
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21.5 2v6h-6M2.5 22v-6h6" />
@@ -122,8 +126,8 @@ export function EmptyState({
           </svg>
         )}
       </div>
-      <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{title}</p>
-      {subtitle && <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{subtitle}</p>}
+      <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--wb-ink)' }}>{title}</p>
+      {subtitle && <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>{subtitle}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   )
@@ -134,10 +138,10 @@ export function SkeletonRows({ rows = 5, cols = 6 }: { rows?: number; cols?: num
   return (
     <tbody>
       {Array.from({ length: rows }).map((_, i) => (
-        <tr key={i} className="border-b border-slate-100 dark:border-slate-800/60">
+        <tr key={i} style={{ borderBottom: '1px solid var(--wb-line)' }}>
           {Array.from({ length: cols }).map((_, j) => (
             <td key={j} className="px-4 py-3">
-              <div className="h-4 animate-pulse rounded bg-slate-200 dark:bg-slate-700" style={{ width: `${40 + ((i + j) % 5) * 12}%` }} />
+              <div className="h-4 animate-pulse rounded" style={{ background: 'var(--wb-surface-2)', width: `${40 + ((i + j) % 5) * 12}%` }} />
             </td>
           ))}
         </tr>

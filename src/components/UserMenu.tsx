@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../store/AuthContext'
 import { ConfirmDialog } from './ui'
 import { ChangePasswordModal } from './ChangePasswordModal'
+import { NicknameModal } from './NicknameModal'
 import type { SyncHandle, SyncState } from '../lib/sync'
 import { SyncBadge } from './SyncBadge'
 
@@ -20,6 +21,7 @@ export function UserMenu({ sync }: Props) {
   const [open, setMenuOpen] = useState(false)
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [changePwOpen, setChangePwOpen] = useState(false)
+  const [nicknameOpen, setNicknameOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
   const [syncState, setSyncState] = useState<SyncState>(() => sync.getState())
 
@@ -60,24 +62,28 @@ export function UserMenu({ sync }: Props) {
         <button
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 sm:h-9 sm:w-9"
+          className="wb-avatar"
           title={auth.session.user.username}
           aria-label="用户菜单"
         >
-          {initial}
+          <span className="wb-avatar-badge">{initial}</span>
+          <span className="hidden sm:inline">
+            {auth.session.user.nickname || auth.session.user.username}
+          </span>
         </button>
 
         {open && (
           <div
             ref={popRef}
-            className="absolute right-0 top-full z-50 mt-1.5 w-56 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+            className="wb-card absolute right-0 top-full z-50 mt-1.5 w-56 py-1"
           >
-            <div className="px-3 py-2 text-xs text-slate-400">
-              已登录为 <span className="font-medium text-slate-700 dark:text-slate-200">{auth.session.user.username}</span>
+            <div className="px-3 py-2 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+              已登录为 <span className="font-medium" style={{ color: 'var(--wb-ink)' }}>{auth.session.user.nickname || auth.session.user.username}</span>
             </div>
-            <div className="my-1 border-t border-slate-100 dark:border-slate-700/60" />
+            <div className="my-1 border-t" style={{ borderColor: 'var(--wb-line)' }} />
             <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+              style={{ color: 'var(--wb-ink-2)' }}
               onClick={doSync}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -87,7 +93,21 @@ export function UserMenu({ sync }: Props) {
               立即同步
             </button>
             <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+              style={{ color: 'var(--wb-ink-2)' }}
+              onClick={() => {
+                setMenuOpen(false)
+                setNicknameOpen(true)
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </svg>
+              修改昵称
+            </button>
+            <button
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+              style={{ color: 'var(--wb-ink-2)' }}
               onClick={() => {
                 setMenuOpen(false)
                 setChangePwOpen(true)
@@ -100,7 +120,8 @@ export function UserMenu({ sync }: Props) {
               修改密码
             </button>
             <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+              style={{ color: 'var(--wb-ink-2)' }}
               onClick={() => {
                 setMenuOpen(false)
                 setConfirmLogout(true)
@@ -116,6 +137,8 @@ export function UserMenu({ sync }: Props) {
       </div>
 
       <ChangePasswordModal open={changePwOpen} onClose={() => setChangePwOpen(false)} />
+
+      <NicknameModal open={nicknameOpen} onClose={() => setNicknameOpen(false)} />
 
       <ConfirmDialog
         open={confirmLogout}

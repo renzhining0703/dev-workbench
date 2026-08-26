@@ -139,45 +139,95 @@ export function TodoView({
   }, [calMonth])
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-[18px]">
+      {/* 页头 */}
+      <div className="wb-page-head">
+        <div>
+          <div className="wb-eyebrow">Todos</div>
+          <h1 className="wb-page-title">待办 <em>日历</em></h1>
+          <p className="wb-page-sub">按日规划，完成即打卡；日历上的绿点表示当天有完成记录</p>
+        </div>
+      </div>
+
       {/* 简报 */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="card p-4 text-center">
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.weekDone}</div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">本周完成（条）</div>
+      <div className="wb-todo-stats">
+        <div className="wb-card wb-stat-mini">
+          <div className="num num-brand">{stats.weekDone}</div>
+          <div className="lbl">本周完成（条）</div>
+          <div className="cap">本周累计</div>
         </div>
-        <div className="card p-4 text-center">
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{stats.streak}</div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">连续打卡（天）</div>
+        <div className="wb-card wb-stat-mini">
+          <div className="num num-accent">{stats.streak}</div>
+          <div className="lbl">连续打卡（天）</div>
+          <div className="cap">今天已完成 · 延续中</div>
         </div>
-        <div className="card p-4 text-center">
-          <div className="text-2xl font-bold text-violet-600 dark:text-violet-400">{stats.monthDone}</div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">本月完成（条）</div>
+        <div className="wb-card wb-stat-mini">
+          <div className="num num-ink">{stats.monthDone}</div>
+          <div className="lbl">本月完成（条）</div>
+          <div className="cap">{format(new Date(), 'M 月累计')}</div>
         </div>
       </div>
 
       {/* 日期导航 + 待办列表 */}
-      <div className="card p-5">
-        <div className="relative mb-4 flex flex-wrap items-center gap-2" ref={calRef}>
+      <div className="wb-card" style={{ padding: 18 }}>
+        <div className="wb-datebar" ref={calRef}>
           <button
-            className="btn-ghost h-8 w-8 p-0 text-slate-500"
+            className="wb-day-nav"
             onClick={() => goDay(-1)}
             aria-label="前一天"
           >
             ◀
           </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              className="wb-date-label"
+              onClick={() => {
+                setCalOpen((v) => !v)
+                setCalMonth(startOfMonth(selectedDate))
+              }}
+            >
+              {dateLabel}
+              <span className="cal">📅</span>
+            </button>
+
+            {/* 日历弹层 */}
+            {calOpen && (
+              <div className="wb-cal-pop">
+                <div className="wb-cal-head">
+                  <button onClick={() => setCalMonth(subMonths(calMonth, 1))} aria-label="上个月">◀</button>
+                  <b>{format(calMonth, 'yyyy年M月')}</b>
+                  <button onClick={() => setCalMonth(addMonths(calMonth, 1))} aria-label="下个月">▶</button>
+                </div>
+                <div className="wb-cal-grid">
+                  {WEEK_LABELS.map((w) => (
+                    <span key={w} className="wk">{w}</span>
+                  ))}
+                  {calendarDays.map((d) => {
+                    const inMonth = isSameMonth(d, calMonth)
+                    const dayStr = toDateStr(d)
+                    const isSel = dayStr === selected
+                    const isToday = isSameDay(d, new Date())
+                    const doneN = doneByDay.get(dayStr) ?? 0
+                    return (
+                      <button
+                        key={dayStr}
+                        className={`wb-cal-day ${isSel ? 'sel' : ''} ${isToday ? 'today' : ''} ${inMonth ? '' : 'out'}`}
+                        onClick={() => {
+                          setSelected(dayStr)
+                          setCalOpen(false)
+                        }}
+                      >
+                        {format(d, 'd')}
+                        {doneN > 0 && <span className="fdot" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
           <button
-            className="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-            onClick={() => {
-              setCalOpen((v) => !v)
-              setCalMonth(startOfMonth(selectedDate))
-            }}
-          >
-            {dateLabel}
-            <span className="ml-1.5 text-xs text-slate-400">📅</span>
-          </button>
-          <button
-            className="btn-ghost h-8 w-8 p-0 text-slate-500"
+            className="wb-day-nav"
             onClick={() => goDay(1)}
             aria-label="后一天"
           >
@@ -185,7 +235,8 @@ export function TodoView({
           </button>
           {selected !== today && (
             <button
-              className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-100 dark:bg-blue-500/15 dark:text-blue-400 dark:hover:bg-blue-500/25"
+              className="wb-btn-ghost"
+              style={{ padding: '5px 10px', fontSize: 12 }}
               onClick={() => {
                 setSelected(today)
                 setCalOpen(false)
@@ -194,88 +245,28 @@ export function TodoView({
               回到今天
             </button>
           )}
-          <span className="ml-auto text-xs text-slate-400">
+          <span className="wb-date-progress">
             {doneCount}/{dayTodos.length} 已完成
           </span>
-
-          {/* 日历弹层 */}
-          {calOpen && (
-            <div className="absolute left-5 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-800">
-              <div className="mb-2 flex items-center justify-between">
-                <button
-                  className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                  onClick={() => setCalMonth(subMonths(calMonth, 1))}
-                  aria-label="上个月"
-                >
-                  ◀
-                </button>
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                  {format(calMonth, 'yyyy年M月')}
-                </span>
-                <button
-                  className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                  onClick={() => setCalMonth(addMonths(calMonth, 1))}
-                  aria-label="下个月"
-                >
-                  ▶
-                </button>
-              </div>
-              <div className="grid grid-cols-7 gap-y-1 text-center">
-                {WEEK_LABELS.map((w) => (
-                  <div key={w} className="py-1 text-xs text-slate-400">{w}</div>
-                ))}
-                {calendarDays.map((d) => {
-                  const inMonth = isSameMonth(d, calMonth)
-                  const dayStr = toDateStr(d)
-                  const isSel = dayStr === selected
-                  const isToday = isSameDay(d, new Date())
-                  const doneN = doneByDay.get(dayStr) ?? 0
-                  return (
-                    <button
-                      key={dayStr}
-                      className={`relative mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs transition ${
-                        isSel
-                          ? 'bg-blue-600 font-bold text-white'
-                          : isToday
-                            ? 'font-bold text-blue-600 hover:bg-slate-100 dark:text-blue-400 dark:hover:bg-slate-700'
-                            : inMonth
-                              ? 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
-                              : 'text-slate-300 dark:text-slate-600'
-                      }`}
-                      onClick={() => {
-                        setSelected(dayStr)
-                        setCalOpen(false)
-                      }}
-                    >
-                      {format(d, 'd')}
-                      {doneN > 0 && !isSel && (
-                        <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-emerald-500" />
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
-        <div className="mb-3 flex gap-2">
+        <div className="wb-add-row">
           <input
-            className="input flex-1"
+            className="wb-input"
             placeholder={selected === today ? '添加一条待办，回车确认…' : `添加到 ${selected} 的待办…`}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
           />
-          <button className="btn-primary" onClick={submit}>添加</button>
+          <button className="wb-btn-soft" onClick={submit}>添加</button>
         </div>
 
         {dayTodos.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+          <p className="wb-todo-empty">
             {selected === today ? '今天暂无待办，享受专注的一天 ☕' : '这一天没有待办记录'}
           </p>
         ) : (
-          <ul className="space-y-1">
+          <ul className="wb-todo-list">
             {dayTodos.map((t) => (
               <TodoRow
                 key={t.id}

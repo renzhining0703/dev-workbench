@@ -73,57 +73,66 @@ export function BackupModal({ open, onClose, onRestore, counts }: Props) {
     <>
       <Modal open={open && !restorePreview} onClose={onClose} title="数据备份" width="max-w-md">
         {error && (
-          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400">
+          <div
+            className="mb-4 rounded-lg border px-3 py-2 text-sm"
+            style={{ borderColor: 'var(--wb-line)', background: 'var(--wb-danger-soft)', color: 'var(--wb-danger)' }}
+          >
             {error}
           </div>
         )}
 
         {/* 当前数据概览 */}
-        <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-          <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">当前数据</p>
+        <div className="mb-5 rounded-lg border border-[var(--wb-line)] bg-[var(--wb-surface-2)] p-4">
+          <p className="mb-2 text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>当前数据</p>
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
-              <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{counts.requirements}</div>
-              <div className="text-xs text-slate-400">需求</div>
+              <div className="text-2xl font-bold" style={{ color: 'var(--wb-ink)' }}>{counts.requirements}</div>
+              <div className="text-xs" style={{ color: 'var(--wb-ink-3)' }}>需求</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{counts.todos}</div>
-              <div className="text-xs text-slate-400">待办</div>
+              <div className="text-2xl font-bold" style={{ color: 'var(--wb-ink)' }}>{counts.todos}</div>
+              <div className="text-xs" style={{ color: 'var(--wb-ink-3)' }}>待办</div>
             </div>
             <div>
-              <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{counts.projects}</div>
-              <div className="text-xs text-slate-400">项目</div>
+              <div className="text-2xl font-bold" style={{ color: 'var(--wb-ink)' }}>{counts.projects}</div>
+              <div className="text-xs" style={{ color: 'var(--wb-ink-3)' }}>项目</div>
             </div>
           </div>
         </div>
 
         {/* 导出 */}
-        <div className="mb-4 flex items-start gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-[var(--wb-line)] p-4">
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+            style={{ background: 'var(--wb-success-soft)', color: 'var(--wb-success)' }}
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
             </svg>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">导出完整备份</p>
-            <p className="mt-0.5 text-xs text-slate-400">将所有需求、待办、项目导出为 JSON 文件，可用于恢复或迁移</p>
-            <button className="btn-primary mt-2.5 !py-1.5 text-xs" onClick={doExport}>
+            <p className="text-sm font-medium" style={{ color: 'var(--wb-ink)' }}>导出完整备份</p>
+            <p className="mt-0.5 text-xs" style={{ color: 'var(--wb-ink-3)' }}>将所有需求、待办、项目导出为 JSON 文件，可用于恢复或迁移</p>
+            <button className="wb-btn-primary mt-2.5 !py-1.5 text-xs" onClick={doExport}>
               下载备份文件
             </button>
           </div>
         </div>
 
         {/* 导入 */}
-        <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400">
+        <div className="flex items-start gap-3 rounded-lg border border-[var(--wb-line)] p-4">
+          <div
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+            style={{ background: 'var(--wb-accent-soft)', color: 'var(--wb-accent-600)' }}
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
             </svg>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">从备份恢复</p>
-            <p className="mt-0.5 text-xs text-slate-400">选择备份 JSON 文件，确认后覆盖当前全部数据</p>
-            <button className="btn-ghost mt-2.5 !py-1.5 text-xs" onClick={() => fileRef.current?.click()}>
+            <p className="text-sm font-medium" style={{ color: 'var(--wb-ink)' }}>从备份恢复</p>
+            <p className="mt-0.5 text-xs" style={{ color: 'var(--wb-ink-3)' }}>选择备份 JSON 文件，确认后覆盖当前全部数据</p>
+            <button className="wb-btn-ghost mt-2.5 !py-1.5 text-xs" onClick={() => fileRef.current?.click()}>
               选择备份文件
             </button>
             <input
@@ -136,7 +145,10 @@ export function BackupModal({ open, onClose, onRestore, counts }: Props) {
           </div>
         </div>
 
-        <div className="mt-5 flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
+        <div
+          className="mt-5 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs"
+          style={{ background: 'var(--wb-warn-soft)', color: 'var(--wb-warn)' }}
+        >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0ZM12 9v4M12 17h.01" />
           </svg>

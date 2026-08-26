@@ -7,6 +7,7 @@ interface BarChartProps {
  * SVG 柱状图：最近 N 个月每月数据
  * - 纯 div + flex 实现（更易主题适配）
  * - 高度按最大柱子等比例缩放
+ * - 颜色走 NOVA 令牌（--wb-brand-*），自动适配亮/暗主题
  */
 export function BarChart({ data, height = 180 }: BarChartProps) {
   const max = Math.max(1, ...data.map((d) => d.count))
@@ -22,14 +23,19 @@ export function BarChart({ data, height = 180 }: BarChartProps) {
               className="flex flex-1 flex-col items-center justify-end"
               title={`${d.label}：${d.count} 个`}
             >
-              <span className="mb-1 text-[11px] font-medium tabular-nums text-slate-500 dark:text-slate-400">
+              <span
+                className="mb-1 text-[11px] font-medium tabular-nums"
+                style={{ color: 'var(--wb-ink-2)' }}
+              >
                 {d.count}
               </span>
               <div
-                className="w-full rounded-t-md bg-indigo-500/90 transition-all dark:bg-indigo-400/90"
+                className="w-full rounded-t-md"
                 style={{
                   height: `${h}%`,
                   minHeight: d.count > 0 ? 4 : 0,
+                  backgroundColor: 'var(--wb-brand-500)',
+                  opacity: 0.9,
                 }}
               />
             </div>
@@ -40,7 +46,8 @@ export function BarChart({ data, height = 180 }: BarChartProps) {
         {data.map((d, i) => (
           <div
             key={i}
-            className="flex-1 text-center text-[10px] text-slate-400 sm:text-xs"
+            className="flex-1 text-center text-[10px] sm:text-xs"
+            style={{ color: 'var(--wb-ink-3)' }}
           >
             {d.label}
           </div>

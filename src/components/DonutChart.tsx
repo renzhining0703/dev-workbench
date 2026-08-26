@@ -44,8 +44,8 @@ export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
   if (total === 0) {
     return (
       <div
-        className="flex items-center justify-center text-sm text-slate-400 dark:text-slate-500"
-        style={{ minHeight: size }}
+        className="flex items-center justify-center text-sm"
+        style={{ minHeight: size, color: 'var(--wb-ink-3)' }}
       >
         暂无数据
       </div>
@@ -53,7 +53,7 @@ export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start sm:gap-6">
+    <div className="wb-donut-wrap">
       <div
         className="relative shrink-0"
         style={{ width: size, height: size }}
@@ -71,9 +71,8 @@ export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke="currentColor"
+            stroke="var(--wb-surface-2)"
             strokeWidth={thickness}
-            className="text-slate-100 dark:text-slate-800"
           />
           {/* 各状态扇形 */}
           {segments.map((s) => (
@@ -96,28 +95,26 @@ export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
         </svg>
         {/* 中心数字 */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-100">
+          <span
+            className="text-2xl font-medium tabular-nums"
+            style={{ fontFamily: 'var(--wb-serif)', color: 'var(--wb-ink)' }}
+          >
             {total}
           </span>
-          <span className="text-[11px] text-slate-400">总需求</span>
+          <span style={{ fontSize: 11, color: 'var(--wb-ink-3)' }}>总需求</span>
         </div>
       </div>
 
       {/* 图例 */}
-      <ul className="grid w-full grid-cols-2 gap-x-3 gap-y-1.5 text-sm sm:w-auto sm:grid-cols-1">
+      <ul className="wb-legend">
         {STATUS_FLOW.map((status) => (
-          <li
-            key={status}
-            className="flex items-center gap-2 text-slate-600 dark:text-slate-300"
-          >
+          <li key={status}>
             <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              className="sw"
               style={{ backgroundColor: DOT_HEX[status] }}
             />
-            <span className="truncate">{statusMeta(status).label}</span>
-            <span className="ml-auto pl-2 font-medium tabular-nums text-slate-700 dark:text-slate-200">
-              {counts[status]}
-            </span>
+            <span>{statusMeta(status).label}</span>
+            <span className="v">{counts[status]}</span>
           </li>
         ))}
       </ul>

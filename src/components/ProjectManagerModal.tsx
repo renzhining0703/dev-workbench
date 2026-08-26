@@ -83,12 +83,15 @@ export function ProjectManagerModal({
   return (
     <>
       <Modal open={open} onClose={onClose} title="项目管理" width="max-w-xl">
-        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">
+        <p className="mb-4 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
           维护需求表单与列表筛选中的项目下拉数据。删除仅影响下拉选项，历史需求记录不会丢失。
         </p>
 
         {msg && (
-          <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+          <div
+            className="mb-3 rounded-lg border px-3 py-2 text-xs"
+            style={{ borderColor: 'var(--wb-line)', background: 'var(--wb-success-soft)', color: 'var(--wb-success)' }}
+          >
             {msg}
           </div>
         )}
@@ -102,18 +105,19 @@ export function ProjectManagerModal({
               if (e.key === 'Enter') handleAdd()
             }}
             placeholder="输入新项目名，如 icare-xxx"
-            className="input flex-1"
+            className="wb-input flex-1"
           />
-          <button className="btn-primary" onClick={handleAdd}>
+          <button className="wb-btn-primary" onClick={handleAdd}>
             添加
           </button>
         </div>
-        <label className="mb-4 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        <label className="mb-4 flex items-center gap-2 text-xs" style={{ color: 'var(--wb-ink-2)' }}>
           <input
             type="checkbox"
             checked={newModuleBased}
             onChange={(e) => setNewModuleBased(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            className="h-3.5 w-3.5 rounded border-[var(--wb-line-2)]"
+            style={{ accentColor: 'var(--wb-brand-500)' }}
           />
           支持分模块发布（需求表单中可为该项目单独填写发布模块，如 make/、admin/）
         </label>
@@ -122,7 +126,7 @@ export function ProjectManagerModal({
         {projects.length === 0 ? (
           <EmptyState title="还没有项目" subtitle="在上方输入项目名添加" />
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          <ul className="divide-y divide-[var(--wb-line)]">
             {projects.map((p) => {
               const count = usageCount.get(p.name) ?? 0
               const editing = editingId === p.id
@@ -142,23 +146,24 @@ export function ProjectManagerModal({
                               setEditName('')
                             }
                           }}
-                          className="input"
+                          className="wb-input"
                         />
-                        <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--wb-ink-2)' }}>
                           <input
                             type="checkbox"
                             checked={editModuleBased}
                             onChange={(e) => setEditModuleBased(e.target.checked)}
-                            className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            className="h-3.5 w-3.5 rounded border-[var(--wb-line-2)]"
+                            style={{ accentColor: 'var(--wb-brand-500)' }}
                           />
                           支持分模块发布
                         </label>
                       </div>
-                      <button className="btn-primary" onClick={handleSaveEdit}>
+                      <button className="wb-btn-primary" onClick={handleSaveEdit}>
                         保存
                       </button>
                       <button
-                        className="btn-ghost"
+                        className="wb-btn-ghost"
                         onClick={() => {
                           setEditingId(null)
                           setEditName('')
@@ -171,27 +176,31 @@ export function ProjectManagerModal({
                     <>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                          <span className="truncate text-sm font-medium" style={{ color: 'var(--wb-ink)' }}>
                             {p.name}
                           </span>
                           {p.moduleBased && (
-                            <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">
+                            <span
+                              className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                              style={{ background: 'var(--wb-accent-soft)', color: 'var(--wb-accent-600)' }}
+                            >
                               分模块
                             </span>
                           )}
                         </div>
-                        <div className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                        <div className="mt-0.5 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
                           关联需求 {count} 条
                         </div>
                       </div>
                       <button
-                        className="btn-ghost px-2 py-1 text-xs"
+                        className="wb-btn-ghost px-2 py-1 text-xs"
                         onClick={() => startEdit(p.id, p.name, p.moduleBased ?? false)}
                       >
                         编辑
                       </button>
                       <button
-                        className="btn-ghost px-2 py-1 text-xs text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50"
+                        className="wb-btn-ghost px-2 py-1 text-xs"
+                        style={{ color: 'var(--wb-danger)' }}
                         onClick={() => setDeleting({ id: p.id, name: p.name })}
                       >
                         删除

@@ -79,13 +79,13 @@ export function ExportModal({
 
   return (
     <Modal open={open} onClose={onClose} title="导出需求清单" width="max-w-lg">
-      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+      <p className="mb-4 text-sm" style={{ color: 'var(--wb-ink-2)' }}>
         按「开发开始时间」所在月份导出，生成 CSV 文件，可用 Excel / WPS 直接打开。
       </p>
 
       <div className="mb-1 flex items-center gap-2">
         <button
-          className="btn-ghost px-2.5"
+          className="wb-btn-ghost px-2.5"
           onClick={() => setMonth(format(addMonths(parse(month, 'yyyy-MM', new Date()), -1), 'yyyy-MM'))}
           aria-label="上个月"
         >
@@ -93,12 +93,12 @@ export function ExportModal({
         </button>
         <input
           type="month"
-          className="input w-44 text-center"
+          className="wb-input w-44 text-center"
           value={month}
           onChange={(e) => e.target.value && setMonth(e.target.value)}
         />
         <button
-          className="btn-ghost px-2.5"
+          className="wb-btn-ghost px-2.5"
           onClick={() => setMonth(format(addMonths(parse(month, 'yyyy-MM', new Date()), 1), 'yyyy-MM'))}
           aria-label="下个月"
         >
@@ -106,15 +106,19 @@ export function ExportModal({
         </button>
       </div>
 
-      <div className="relative mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800/50">
+      <div
+        className="relative mt-4 rounded-lg border p-3 text-sm"
+        style={{ borderColor: 'var(--wb-line)', background: 'var(--wb-surface-2)' }}
+      >
         <button
-          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-slate-400 transition hover:bg-slate-200/70 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition hover:bg-[var(--wb-surface)] hover:text-[var(--wb-ink)]"
+          style={{ color: 'var(--wb-ink-3)' }}
           onClick={copyList}
           disabled={list.length === 0}
           title="复制当月需求清单"
         >
           {copied ? (
-            <span className="font-medium text-emerald-600 dark:text-emerald-400">✓ 已复制</span>
+            <span className="font-medium" style={{ color: 'var(--wb-success)' }}>✓ 已复制</span>
           ) : (
             <>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -125,13 +129,13 @@ export function ExportModal({
             </>
           )}
         </button>
-        <p className="text-slate-600 dark:text-slate-300">
-          {monthLabel} 共 <span className="font-semibold text-indigo-600 dark:text-indigo-400">{list.length}</span> 个开发需求
+        <p style={{ color: 'var(--wb-ink)' }}>
+          {monthLabel} 共 <span className="font-semibold" style={{ color: 'var(--wb-brand-500)' }}>{list.length}</span> 个开发需求
         </p>
         {list.length > 0 && (
           <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
             {list.map((r) => (
-              <li key={r.id} className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <li key={r.id} className="flex items-center justify-between text-xs" style={{ color: 'var(--wb-ink-2)' }}>
                 <span className="truncate pr-2">{r.name}</span>
                 <span className="shrink-0">{fmtDate(r.devStartTime)}</span>
               </li>
@@ -141,8 +145,8 @@ export function ExportModal({
       </div>
 
       <div className="mt-6 flex justify-end gap-2">
-        <button className="btn-ghost" onClick={onClose}>取消</button>
-        <button className="btn-primary" disabled={list.length === 0} onClick={doExport}>
+        <button className="wb-btn-ghost" onClick={onClose}>取消</button>
+        <button className="wb-btn-primary" disabled={list.length === 0} onClick={doExport}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
           </svg>

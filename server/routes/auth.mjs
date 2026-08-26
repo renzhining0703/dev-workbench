@@ -29,6 +29,27 @@ import {
 } from '../lib/password.mjs'
 import { genToken } from '../lib/token.mjs'
 
+/** 昵称上限（按 UTF-16 code unit 计，中英文混排下 30 字符足够） */
+export const NICKNAME_MAX = 30
+
+/**
+ * 清洗昵称。注册场景允许缺省（'' → 回退 username）；
+ * 修改场景必须非空。非法输入返回 { ok: false }。
+ */
+function normalizeNickname(raw, { allowEmpty = false } = {}) {
+  if (raw === undefined || raw === null) {
+    return allowEmpty ? { ok: true, value: '' } : { ok: false }
+  }
+  if (typeof raw !== 'string') return { ok: false }
+  const v = raw.trim()
+  if (v.length === 0) {
+    return allowEmpty ? { ok: true, value: '' } : { ok: false }
+  }
+  if (v.length > NICKNAME_MAX) return { ok: false }
+  return { ok: true, value: v }
+}
+
+
 /**
  * @param {object} deps
  * @param {import('../store/users.mjs').UserStore} deps.userStore
@@ -66,6 +87,12 @@ export function createAuthRouter({
       return res.status(400).json({ ok: false, error: 'invalid input' })
     }
 
+    // 昵称可选：缺省回退 username；传入则必须非空且 ≤30 字符
+    const nick = normalizeNickname(req.body?.nickname, { allowEmpty: true })
+    if (!nick.ok) {
+      return res.status(400).json({ ok: false, error: 'invalid input' })
+    }
+
     // 邀请码校验（如配置）；不区分「邀请码错」与「用户名冲突」——一律 invalid credentials
     if (inviteCode.length > 0 && given !== inviteCode) {
       return res.status(401).json({ ok: false, error: 'invalid credentials' })
@@ -76,7 +103,7 @@ export function createAuthRouter({
 
     const saltHex = genSalt()
     const pwHashHex = hashPassword(password, saltHex)
-    const result = userStore.create({ username, pwHashHex, saltHex })
+    const result = userStore.create({ username, nickname: nick.value, pwHashHex, saltHex })
     if (!result.ok) {
       return res.status(401).json({ ok: false, error: 'invalid credentials' })
     }
@@ -88,7 +115,7 @@ export function createAuthRouter({
 
     return res.status(200).json({
       ok: true,
-      data: { user: { username }, token },
+      data: { user: { username, nickname: result.user.nickname }, token },
     })
   })
 
@@ -114,7 +141,7 @@ export function createAuthRouter({
     userStore.touch(username)
     return res.status(200).json({
       ok: true,
-      data: { user: { username }, token },
+      data: { user: { username, nickname: u.nickname }, token },
     })
   })
 
@@ -128,7 +155,26 @@ export function createAuthRouter({
   router.get('/me', requireAuth, (req, res) => {
     res.status(200).json({
       ok: true,
-      data: { user: { username: req.user.username } },
+      data: { user: { username: req.user.username, nickname: req.user.nickname } },
+    })
+  })
+
+  /**
+   * POST /api/auth/nickname：登录态修改昵称
+   * body: { nickname }（非空、≤ 30 字符）
+   */
+  router.post('/nickname', requireAuth, (req, res) => {
+    const nick = normalizeNickname(req.body?.nickname)
+    if (!nick.ok) {
+      return res.status(400).json({ ok: false, error: 'invalid input' })
+    }
+    const updated = userStore.setNickname(req.user.username, nick.value)
+    if (!updated) {
+      return res.status(401).json({ ok: false, error: 'invalid credentials' })
+    }
+    res.status(200).json({
+      ok: true,
+      data: { user: { username: req.user.username, nickname: nick.value } },
     })
   })
 

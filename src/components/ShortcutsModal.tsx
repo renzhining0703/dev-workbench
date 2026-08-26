@@ -19,16 +19,17 @@ export function ShortcutsModal({ open, onClose }: Props) {
         {SHORTCUTS.map((s) => (
           <div
             key={s.keys[0]}
-            className="flex items-center justify-between rounded-lg px-3 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
+            className="flex items-center justify-between rounded-lg px-3 py-2.5 transition hover:bg-[var(--wb-surface-2)]"
           >
-            <span className="text-sm text-slate-600 dark:text-slate-300">
+            <span className="text-sm" style={{ color: 'var(--wb-ink-2)' }}>
               {s.desc}
             </span>
             <div className="flex items-center gap-1">
               {s.keys.map((k) => (
                 <kbd
                   key={k}
-                  className="inline-flex min-w-[28px] items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                  className="inline-flex min-w-[28px] items-center justify-center rounded-md border border-[var(--wb-line)] bg-[var(--wb-surface-2)] px-2 py-1 text-xs font-medium shadow-sm"
+                  style={{ color: 'var(--wb-ink-2)' }}
                 >
                   {k}
                 </kbd>
@@ -37,7 +38,7 @@ export function ShortcutsModal({ open, onClose }: Props) {
           </div>
         ))}
       </div>
-      <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
+      <p className="mt-4 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
         在输入框中编辑时快捷键自动禁用。
       </p>
     </Modal>

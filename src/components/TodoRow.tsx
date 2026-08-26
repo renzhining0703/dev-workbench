@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { format, parseISO } from 'date-fns'
-import type { TodoItem } from '../types'
+import type { TodoItem, TodoPriority } from '../types'
 import { nextPriority, priorityOf, PRIORITY_META } from '../lib/todos'
 
 /** 完成时间展示：HH:mm（旧数据缺 completedAt 时不显示） */
@@ -71,19 +71,21 @@ export function TodoRow({
   const doneTime = fmtCompletedAt(todo.completedAt)
   const prio = priorityOf(todo)
   const prioMeta = PRIORITY_META[prio]
+  // NOVA 语义色：高=危险红 / 普通=琥珀 / 低=弱化灰
+  const prioChipStyle: Record<TodoPriority, CSSProperties> = {
+    high: { background: 'var(--wb-danger-soft)', color: 'var(--wb-danger)' },
+    normal: { background: 'var(--wb-surface-2)', color: 'var(--wb-ink-2)' },
+    low: { background: 'transparent', color: 'var(--wb-ink-3)' },
+  }
 
   return (
-    <li className="group flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
+    <li className={`wb-todo-row ${todo.done ? 'done' : ''}`}>
       <button
         onClick={() => onToggle(todo.id)}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
-          todo.done
-            ? 'border-emerald-500 bg-emerald-500 text-white'
-            : 'border-slate-300 text-transparent hover:border-emerald-400 dark:border-slate-600'
-        }`}
+        className="wb-check"
         aria-label={todo.done ? '标记未完成' : '标记完成'}
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 6 9 17l-5-5" />
         </svg>
       </button>
@@ -91,7 +93,8 @@ export function TodoRow({
       {editing ? (
         <input
           ref={inputRef}
-          className="input h-7 flex-1 py-0 text-sm"
+          className="wb-input"
+          style={{ flex: 1, height: 30, padding: '4px 10px' }}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -102,44 +105,42 @@ export function TodoRow({
           aria-label="编辑待办内容"
         />
       ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <>
+          {/* 优先级圆点（设计稿风格） */}
+          <span className={`pri ${prio === 'high' ? 'pri-high' : prio === 'normal' ? 'pri-normal' : 'pri-low'}`} />
           <span
-            className={`min-w-0 flex-1 cursor-text select-none truncate text-sm ${
-              todo.done
-                ? 'text-slate-400 line-through dark:text-slate-500'
-                : muted
-                  ? 'text-slate-500 dark:text-slate-400'
-                  : 'text-slate-700 dark:text-slate-200'
-            }`}
+            className="content"
+            style={muted ? { color: 'var(--wb-ink-3)' } : undefined}
             onDoubleClick={startEdit}
             title={todo.content}
           >
             {todo.content}
+            {todo.done && doneTime && (
+              <span style={{ fontSize: 11, color: 'var(--wb-ink-3)', marginLeft: 8 }}>
+                {doneTime} 完成
+              </span>
+            )}
           </span>
-          {todo.done && doneTime && (
-            <span className="shrink-0 select-none text-xs text-slate-400 dark:text-slate-500">
-              {doneTime} 完成
-            </span>
-          )}
-        </div>
+        </>
       )}
 
       {/* 关联需求 chip（点击跳回需求抽屉） */}
       {!editing && reqName && todo.requirementId && (
         <button
           onClick={() => onOpenRequirement?.(todo.requirementId!)}
-          className="max-w-[90px] shrink-0 truncate rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25 sm:max-w-[160px]"
+          className="req-chip"
           title={`打开需求「${reqName}」`}
         >
           🔗 {reqName}
         </button>
       )}
 
-      {/* 优先级三态循环：normal 普通点 / high 红高 / low 灰低，点击切换 */}
+      {/* 优先级三态循环：高 / 普通 / 低，点击切换 */}
       {!editing && (
         <button
           onClick={() => onUpdate(todo.id, { priority: nextPriority(prio) })}
-          className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold transition ${prioMeta.chip}`}
+          className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold transition"
+          style={prioChipStyle[prio]}
           aria-label={`优先级：${prioMeta.label}，点击切换`}
           title={`优先级：${prioMeta.label}，点击切换`}
         >
@@ -151,7 +152,10 @@ export function TodoRow({
         <div className="flex shrink-0 items-center gap-0.5">
           <button
             onClick={startEdit}
-            className="rounded p-1 text-slate-300 opacity-0 transition hover:text-blue-500 group-hover:opacity-100 dark:text-slate-600"
+            className="rounded p-1 opacity-0 transition hover:text-blue-500 group-hover:opacity-100"
+            style={{ color: 'var(--wb-ink-3)', opacity: 0 }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0')}
             aria-label="编辑待办"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -160,7 +164,10 @@ export function TodoRow({
           </button>
           <button
             onClick={() => onRemove(todo.id)}
-            className="rounded p-1 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100 dark:text-slate-600"
+            className="rounded p-1 opacity-0 transition group-hover:opacity-100"
+            style={{ color: 'var(--wb-ink-3)', opacity: 0 }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0')}
             aria-label="删除待办"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

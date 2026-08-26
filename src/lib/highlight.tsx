@@ -20,7 +20,8 @@ export function highlight(text: string, keyword: string): ReactNode {
     parts.push(
       <mark
         key={idx}
-        className="rounded bg-amber-200 px-0.5 text-slate-900 dark:bg-amber-400/30 dark:text-amber-200"
+        className="rounded px-0.5"
+        style={{ background: 'var(--wb-warn-soft)', color: 'var(--wb-warn)' }}
       >
         {text.slice(idx, idx + kw.length)}
       </mark>,

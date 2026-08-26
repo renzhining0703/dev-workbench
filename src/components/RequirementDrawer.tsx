@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { Requirement, RequirementStatus } from '../types'
 import { STATUS_FLOW, statusMeta } from '../types'
 import { fmtDate, isDateToday, copyToClipboard } from '../lib/utils'
@@ -20,6 +21,15 @@ const TIMELINE: { key: keyof Requirement; label: string }[] = [
   { key: 'testTime', label: '提测时间' },
   { key: 'publishTime', label: '上线时间' },
 ]
+
+/** 区块标题（NOVA 风格小字标签） */
+function FieldLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
+      {children}
+    </p>
+  )
+}
 
 export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange }: Props) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -53,26 +63,35 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
         onClick={onClose}
       />
       {/* 抽屉面板 */}
-      <div className="fixed right-0 top-0 z-50 h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl dark:bg-[#0f1521] animate-[slideIn_0.2s_ease-out]">
+      <div
+        className="fixed right-0 top-0 z-50 h-full w-full max-w-md overflow-y-auto shadow-2xl animate-[slideIn_0.2s_ease-out]"
+        style={{ background: 'var(--wb-surface)' }}
+      >
         <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
         {/* 头部 */}
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur dark:border-slate-800 dark:bg-[#0f1521]/90">
+        <div
+          className="sticky top-0 z-10 px-5 py-4 backdrop-blur"
+          style={{ borderBottom: '1px solid var(--wb-line)', background: 'var(--wb-surface)' }}
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold leading-snug text-slate-800 dark:text-slate-100">
+              <h3 className="text-base font-semibold leading-snug" style={{ color: 'var(--wb-ink)' }}>
                 {r.name}
               </h3>
               <div className="mt-1.5 flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.color} bg-slate-100 dark:bg-slate-800`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+                <span className={`wb-chip st-${r.status}`}>
+                  <span className="dot" />
                   {meta.label}
                 </span>
-                <span className="text-xs text-slate-400">创建于 {fmtDate(r.createdAt)}</span>
+                <span className="text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+                  创建于 {fmtDate(r.createdAt)}
+                </span>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="shrink-0 rounded-lg p-1.5 transition"
+              style={{ color: 'var(--wb-ink-3)' }}
               aria-label="关闭"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -86,7 +105,7 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
         <div className="space-y-5 px-5 py-5">
           {/* 状态切换 */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">状态</label>
+            <FieldLabel>状态</FieldLabel>
             <Select
               value={r.status}
               onChange={(s) => onStatusChange(r.id, s)}
@@ -115,9 +134,12 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
 
           {/* 时间线 */}
           <div>
-            <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">时间线</p>
+            <FieldLabel>时间线</FieldLabel>
             <div className="relative space-y-3 pl-4">
-              <div className="absolute left-[5px] top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" />
+              <div
+                className="absolute bottom-2 left-[5px] top-2 w-px"
+                style={{ background: 'var(--wb-line)' }}
+              />
               {TIMELINE.map(({ key, label }) => {
                 const iso = r[key] as string | null
                 const date = fmtDate(iso)
@@ -126,14 +148,30 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
                 return (
                   <div key={String(key)} className="relative flex items-center gap-2">
                     <span
-                      className={`absolute -left-4 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-[#0f1521] ${
-                        hasValue ? (today ? 'bg-rose-500' : 'bg-indigo-500') : 'bg-slate-300 dark:bg-slate-600'
-                      }`}
+                      className="absolute -left-4 h-2.5 w-2.5 rounded-full ring-2"
+                      style={{
+                        background: hasValue ? (today ? 'var(--wb-danger)' : 'var(--wb-brand-500)') : 'var(--wb-ink-3)',
+                        boxShadow: `0 0 0 2px var(--wb-surface)`,
+                        opacity: hasValue ? 1 : 0.5,
+                      }}
                     />
-                    <span className="w-20 shrink-0 text-xs text-slate-400">{label}</span>
-                    <span className={`text-sm ${hasValue ? (today ? 'font-semibold text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200') : 'text-slate-300 dark:text-slate-600'}`}>
+                    <span className="w-20 shrink-0 text-xs" style={{ color: 'var(--wb-ink-3)' }}>{label}</span>
+                    <span
+                      className="text-sm"
+                      style={{
+                        color: hasValue ? (today ? 'var(--wb-danger)' : 'var(--wb-ink)') : 'var(--wb-ink-3)',
+                        fontWeight: today ? 600 : 400,
+                      }}
+                    >
                       {date}
-                      {today && <span className="ml-1.5 rounded bg-rose-100 px-1 py-0.5 text-[10px] font-semibold text-rose-600 dark:bg-rose-500/15 dark:text-rose-400">今日</span>}
+                      {today && (
+                        <span
+                          className="ml-1.5 rounded px-1 py-0.5 text-[10px] font-semibold"
+                          style={{ background: 'var(--wb-danger-soft)', color: 'var(--wb-danger)' }}
+                        >
+                          今日
+                        </span>
+                      )}
                     </span>
                   </div>
                 )
@@ -144,8 +182,11 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
           {/* 备注 */}
           {r.remark && (
             <div>
-              <p className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">备注</p>
-              <div className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+              <FieldLabel>备注</FieldLabel>
+              <div
+                className="whitespace-pre-wrap rounded-lg border p-3 text-sm"
+                style={{ borderColor: 'var(--wb-line)', background: 'var(--wb-surface-2)', color: 'var(--wb-ink-2)' }}
+              >
                 {r.remark}
               </div>
             </div>
@@ -153,7 +194,7 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
 
           {/* 状态流转 */}
           <div>
-            <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">状态流转</p>
+            <FieldLabel>状态流转</FieldLabel>
             <div className="flex flex-wrap items-center gap-1">
               {STATUS_FLOW.map((s, i) => {
                 const active = s === r.status
@@ -161,18 +202,19 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
                 return (
                   <div key={s} className="flex items-center gap-1">
                     <span
-                      className={`rounded px-1.5 py-0.5 text-[11px] ${
+                      className="rounded px-1.5 py-0.5 text-[11px]"
+                      style={
                         active
-                          ? 'bg-indigo-600 font-medium text-white'
+                          ? { background: 'var(--wb-brand-600)', color: '#F6EFDF', fontWeight: 600 }
                           : passed
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-slate-400 dark:text-slate-500'
-                      }`}
+                            ? { color: 'var(--wb-success)' }
+                            : { color: 'var(--wb-ink-3)' }
+                      }
                     >
                       {statusMeta(s).label}
                     </span>
                     {i < STATUS_FLOW.length - 1 && (
-                      <span className="text-slate-300 dark:text-slate-600">→</span>
+                      <span style={{ color: 'var(--wb-ink-3)', opacity: 0.6 }}>→</span>
                     )}
                   </div>
                 )
@@ -182,9 +224,13 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
         </div>
 
         {/* 底部操作栏 */}
-        <div className="sticky bottom-0 border-t border-slate-200 bg-white/90 px-5 py-3 backdrop-blur dark:border-slate-800 dark:bg-[#0f1521]/90">
+        <div
+          className="sticky bottom-0 px-5 py-3 backdrop-blur"
+          style={{ borderTop: '1px solid var(--wb-line)', background: 'var(--wb-surface)' }}
+        >
           <button
-            className="btn-primary w-full"
+            className="wb-btn-primary w-full"
+            style={{ justifyContent: 'center' }}
             onClick={() => onEdit(r)}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -214,19 +260,16 @@ function DrawerField({
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="shrink-0 text-xs text-slate-400">{label}</span>
+      <span className="shrink-0 text-xs" style={{ color: 'var(--wb-ink-3)' }}>{label}</span>
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-sm text-slate-700 dark:text-slate-200">
+        <span className="truncate text-sm" style={{ color: 'var(--wb-ink)' }}>
           {value || '—'}
         </span>
         {copyable && value && (
           <button
             onClick={onCopy}
-            className={`shrink-0 rounded p-1 transition ${
-              copied
-                ? 'text-emerald-500'
-                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-            }`}
+            className="shrink-0 rounded p-1 transition"
+            style={{ color: copied ? 'var(--wb-success)' : 'var(--wb-ink-3)' }}
             title={copied ? '已复制' : '点击复制'}
           >
             {copied ? (

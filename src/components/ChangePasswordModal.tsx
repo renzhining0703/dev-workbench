@@ -62,20 +62,28 @@ export function ChangePasswordModal({ open, onClose }: Props) {
     <Modal open={open} onClose={close} title="修改密码" width="max-w-sm">
       <div className="space-y-4">
         {err && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400">
+          <div
+            className="rounded-lg border px-3 py-2 text-sm"
+            style={{ borderColor: 'var(--wb-line)', background: 'var(--wb-danger-soft)', color: 'var(--wb-danger)' }}
+          >
             {err}
           </div>
         )}
         {okMsg && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400">
+          <div
+            className="rounded-lg border px-3 py-2 text-sm"
+            style={{ borderColor: 'var(--wb-line)', background: 'var(--wb-success-soft)', color: 'var(--wb-success)' }}
+          >
             {okMsg}
           </div>
         )}
 
         <div>
-          <label className="label">当前密码</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
+            当前密码
+          </label>
           <input
-            className="input"
+            className="wb-input"
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
@@ -85,9 +93,11 @@ export function ChangePasswordModal({ open, onClose }: Props) {
         </div>
 
         <div>
-          <label className="label">新密码</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
+            新密码
+          </label>
           <input
-            className="input"
+            className="wb-input"
             type="password"
             placeholder="≥ 8 位"
             value={newPassword}
@@ -95,14 +105,18 @@ export function ChangePasswordModal({ open, onClose }: Props) {
             autoComplete="new-password"
           />
           {!validNew && newPassword.length > 0 && (
-            <p className="mt-1 text-xs text-rose-500">密码至少 8 位</p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--wb-danger)' }}>
+              密码至少 8 位
+            </p>
           )}
         </div>
 
         <div>
-          <label className="label">确认新密码</label>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
+            确认新密码
+          </label>
           <input
-            className="input"
+            className="wb-input"
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
@@ -110,16 +124,18 @@ export function ChangePasswordModal({ open, onClose }: Props) {
             onKeyDown={(e) => e.key === 'Enter' && submit()}
           />
           {!validConfirm && confirmPassword.length > 0 && (
-            <p className="mt-1 text-xs text-rose-500">两次输入不一致</p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--wb-danger)' }}>
+              两次输入不一致
+            </p>
           )}
         </div>
       </div>
 
       <div className="mt-6 flex justify-end gap-2">
-        <button className="btn-ghost" onClick={close}>
+        <button className="wb-btn-ghost" onClick={close}>
           取消
         </button>
-        <button className="btn-primary" disabled={!canSubmit} onClick={submit}>
+        <button className="wb-btn-primary" disabled={!canSubmit} onClick={submit}>
           {busy ? '…' : '确认修改'}
         </button>
       </div>

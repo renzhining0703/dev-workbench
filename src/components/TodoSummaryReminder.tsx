@@ -67,15 +67,18 @@ export function TodoSummaryReminder({
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
-      <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-indigo-200 bg-white px-4 py-3 shadow-lg dark:border-indigo-500/30 dark:bg-slate-900">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
+      <div className="wb-card mx-auto flex max-w-md items-center gap-3 px-4 py-3">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+          style={{ background: 'var(--wb-brand-600)', color: '#F6EFDF' }}
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
           </svg>
         </div>
-        <div className="min-w-0 flex-1 text-sm text-slate-700 dark:text-slate-200">
+        <div className="min-w-0 flex-1 text-sm" style={{ color: 'var(--wb-ink)' }}>
           <p className="font-medium">今日还有 {banner.undone} 条待办未完成</p>
-          <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+          <p className="truncate text-xs" style={{ color: 'var(--wb-ink-2)' }}>
             {[
               banner.high > 0 ? `高优先级 ${banner.high} 条` : '',
               banner.overdue > 0 ? `昨日遗留 ${banner.overdue} 条` : '',
@@ -89,7 +92,7 @@ export function TodoSummaryReminder({
               setBanner(null)
               onViewTodos()
             }}
-            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700"
+            className="wb-btn-soft shrink-0 text-xs"
           >
             查看待办
           </button>
@@ -97,7 +100,8 @@ export function TodoSummaryReminder({
         <button
           type="button"
           onClick={() => setBanner(null)}
-          className="shrink-0 rounded px-1.5 py-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          className="shrink-0 rounded px-1.5 py-1 text-xs transition hover:text-[var(--wb-ink)]"
+          style={{ color: 'var(--wb-ink-3)' }}
           aria-label="关闭"
         >
           ✕

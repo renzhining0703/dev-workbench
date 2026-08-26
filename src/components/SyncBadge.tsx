@@ -21,24 +21,24 @@ const STATE_META: Record<
   { color: string; bg: string; label: string; spin?: boolean }
 > = {
   idle: {
-    color: 'text-emerald-600 dark:text-emerald-400',
-    bg: 'bg-emerald-50 dark:bg-emerald-500/10',
+    color: 'text-emerald-300',
+    bg: 'bg-emerald-500/15',
     label: '已同步',
   },
   syncing: {
-    color: 'text-indigo-600 dark:text-indigo-400',
-    bg: 'bg-indigo-50 dark:bg-indigo-500/10',
+    color: 'text-sky-300',
+    bg: 'bg-sky-500/15',
     label: '同步中…',
     spin: true,
   },
   offline: {
-    color: 'text-amber-600 dark:text-amber-400',
-    bg: 'bg-amber-50 dark:bg-amber-500/10',
+    color: 'text-amber-300',
+    bg: 'bg-amber-500/15',
     label: '离线',
   },
   error: {
-    color: 'text-rose-600 dark:text-rose-400',
-    bg: 'bg-rose-50 dark:bg-rose-500/10',
+    color: 'text-rose-300',
+    bg: 'bg-rose-500/15',
     label: '同步出错',
   },
 }
@@ -92,7 +92,7 @@ export function SyncBadge({ sync }: Props) {
         onClick={() => setOpen((v) => !v)}
         title={meta.label}
         aria-label={meta.label}
-        className={`flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 sm:h-9 sm:w-9 ${meta.color}`}
+        className={`wb-icon-btn ${meta.color}`}
       >
         {state.status === 'idle' && (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -120,7 +120,7 @@ export function SyncBadge({ sync }: Props) {
       {open && (
         <div
           ref={popRef}
-          className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+          className="wb-card absolute right-0 top-full z-50 mt-1.5 w-64 p-3"
         >
           <div className="mb-2 flex items-center gap-2">
             <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${meta.bg} ${meta.color}`}>
@@ -132,23 +132,26 @@ export function SyncBadge({ sync }: Props) {
                 <span className="text-xs font-semibold">{meta.label.charAt(0)}</span>
               )}
             </span>
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            <span className="text-sm font-medium" style={{ color: 'var(--wb-ink)' }}>
               {meta.label}
             </span>
           </div>
-          <dl className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+          <dl className="space-y-1 text-xs" style={{ color: 'var(--wb-ink-2)' }}>
             <div className="flex justify-between">
               <dt>最近同步</dt>
-              <dd className="text-slate-700 dark:text-slate-300">{fmtTime(state.lastSyncAt)}</dd>
+              <dd style={{ color: 'var(--wb-ink)' }}>{fmtTime(state.lastSyncAt)}</dd>
             </div>
             <div className="flex justify-between">
               <dt>本地变更</dt>
-              <dd className={state.pendingChanges ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}>
+              <dd className={state.pendingChanges ? 'font-medium' : ''} style={{ color: state.pendingChanges ? 'var(--wb-warn)' : 'var(--wb-ink)' }}>
                 {state.pendingChanges ? '有未同步' : '无'}
               </dd>
             </div>
             {state.lastError && (
-              <div className="mt-1 rounded bg-rose-50 px-2 py-1 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400">
+              <div
+                className="mt-1 rounded px-2 py-1"
+                style={{ background: 'var(--wb-danger-soft)', color: 'var(--wb-danger)' }}
+              >
                 {state.lastError}
               </div>
             )}
@@ -157,7 +160,7 @@ export function SyncBadge({ sync }: Props) {
             type="button"
             onClick={handleSyncNow}
             disabled={state.status === 'syncing'}
-            className="btn-primary mt-3 w-full text-xs disabled:opacity-50"
+            className="wb-btn-primary mt-3 w-full justify-center text-xs disabled:opacity-50"
           >
             {state.pendingChanges ? '立即推送' : '立即拉取'}
           </button>

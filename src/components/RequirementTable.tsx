@@ -41,6 +41,9 @@ const VALID_STATUSES: StatusFilter[] = ['all', 'pending', 'developing', 'testing
 const VALID_SORT_FIELDS: SortField[] = ['createdAt', 'publishTime', 'status', 'name']
 const VALID_SORT_DIRS: SortDir[] = ['asc', 'desc']
 
+/** NOVA 品牌色（选中行/悬停面板等场景的半透明底） */
+const BRAND_SOFT = 'rgba(42,112,86,.1)'
+
 interface Props {
   requirements: Requirement[]
   onEdit: (r: Requirement) => void
@@ -77,18 +80,23 @@ function TestDueBadge({ r }: { r: Requirement }) {
   if (r.testTime > today) return null
 
   let label: string
-  let cls: string
+  let bg: string
+  let color: string
   if (r.testTime === today) {
     label = '⏰ 今日提测'
-    cls = 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+    bg = 'var(--wb-warn-soft)'
+    color = 'var(--wb-warn)'
   } else {
     const days = Math.max(1, Math.round((Date.parse(today) - Date.parse(r.testTime)) / 86400000))
     label = `⏰ 提测超期 ${days} 天`
-    cls = 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400'
+    bg = 'var(--wb-danger-soft)'
+    color = 'var(--wb-danger)'
   }
   return (
     <div className="mt-1">
-      <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
+      <span className="wb-chip" style={{ background: bg, color }}>
+        {label}
+      </span>
     </div>
   )
 }
@@ -106,22 +114,15 @@ function TimeCell({ r, wrap = false }: { r: Requirement; wrap?: boolean }) {
   }).filter(Boolean) as { key: string; label: string; date: string; today: boolean }[]
 
   if (items.length === 0) {
-    return <span className="text-slate-300 dark:text-slate-600">—</span>
+    return <span style={{ color: 'var(--wb-ink-3)', opacity: 0.6 }}>—</span>
   }
 
   return (
     <div className={`flex items-center gap-1.5 text-xs ${wrap ? 'flex-wrap' : 'whitespace-nowrap'}`}>
       {items.map((it, i) => (
-        <span
-          key={it.key}
-          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
-            it.today
-              ? 'bg-rose-100 font-semibold text-rose-600 dark:bg-rose-500/15 dark:text-rose-400'
-              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-          }`}
-        >
-          {i > 0 && wrap && <span className="opacity-40">·</span>}
-          <span className="opacity-75">{it.label}</span>
+        <span key={it.key} className={`wb-time-tag ${it.today ? 'hot' : ''}`}>
+          {i > 0 && wrap && <span style={{ opacity: 0.4 }}>·</span>}
+          <span style={{ opacity: 0.75 }}>{it.label}</span>
           <span className={it.today ? '' : 'tabular-nums'}>{it.date}</span>
         </span>
       ))}
@@ -395,121 +396,133 @@ export function RequirementTable({
   const deleting = requirements.find((r) => r.id === deleteId)
   const drawerReq = requirements.find((r) => r.id === drawerId)
 
+  /** 行内复选框统一样式（accent 跟随 NOVA 品牌色） */
+  const checkboxStyle = { accentColor: 'var(--wb-brand-500)' } as const
+
   return (
-    <div className="space-y-4">
+    <div>
+      {/* 页面标题 */}
+      <div className="wb-page-head">
+        <div>
+          <p className="wb-eyebrow">需求</p>
+          <h2 className="wb-page-title">
+            需求<em>清单</em>
+          </h2>
+          <p className="wb-page-sub">
+            按状态 / 项目 / 关键词筛选 · 支持排序、批量操作与 CSV 导出
+          </p>
+        </div>
+      </div>
+
       {/* 筛选工具栏 */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="wb-filter-bar" style={{ alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: '1 1 auto', minWidth: 0 }}>
           {/* 状态筛选：移动端 wrap 让所有按钮完整可见，桌面端不 wrap（单行展示全部 8 个） */}
-          <div className="flex sm:overflow-visible">
-            <div className="flex flex-wrap rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800 sm:flex-nowrap">
-              {/* 高频：桌面与移动都展示 */}
-              {/* 全部（单独处理，避免与 RequirementStatus 类型混用） */}
+          <div className="wb-pills">
+            {/* 全部（单独处理，避免与 RequirementStatus 类型混用） */}
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`wb-pill ${statusFilter === 'all' ? 'active' : ''}`}
+            >
+              全部
+              <span className="cnt">{counts.all}</span>
+            </button>
+
+            {/* 高频：桌面与移动都展示 */}
+            {HIGH_FREQ_STATUSES.map((s) => (
               <button
-                onClick={() => setStatusFilter('all')}
-                className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                  statusFilter === 'all'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`wb-pill ${statusFilter === s ? 'active' : ''}`}
               >
-                全部
-                <span className="ml-1 opacity-70">{counts.all}</span>
+                {statusMeta(s).label}
+                <span className="cnt">{counts[s]}</span>
               </button>
+            ))}
 
-              {/* 高频：桌面与移动都展示 */}
-              {HIGH_FREQ_STATUSES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                    statusFilter === s
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-                  }`}
-                >
-                  {statusMeta(s).label}
-                  <span className="ml-1 opacity-70">{counts[s]}</span>
-                </button>
-              ))}
+            {/* 低频：仅桌面直接展示（移动端藏在更多下拉里） */}
+            {LOW_FREQ_STATUSES.map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`wb-pill hidden md:inline-flex ${statusFilter === s ? 'active' : ''}`}
+              >
+                {statusMeta(s).label}
+                <span className="cnt">{counts[s]}</span>
+              </button>
+            ))}
 
-              {/* 低频：仅桌面直接展示（移动端藏在更多下拉里） */}
-              {LOW_FREQ_STATUSES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={`hidden shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition md:inline-flex ${
-                    statusFilter === s
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-                  }`}
-                >
-                  {statusMeta(s).label}
-                  <span className="ml-1 opacity-70">{counts[s]}</span>
-                </button>
-              ))}
-
-              {/* 更多下拉：仅移动端 */}
-              <div className="relative md:hidden">
-                <button
-                  ref={moreButtonRef}
-                  onClick={() => setMoreOpen((v) => !v)}
-                  className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                    statusFilter !== 'all' &&
-                    LOW_FREQ_STATUSES.includes(statusFilter as RequirementStatus)
-                    ? 'bg-indigo-600 text-white shadow-sm'
+            {/* 更多下拉：仅移动端 */}
+            <div className="relative md:hidden">
+              <button
+                ref={moreButtonRef}
+                onClick={() => setMoreOpen((v) => !v)}
+                className={`wb-pill ${
+                  statusFilter !== 'all' && LOW_FREQ_STATUSES.includes(statusFilter as RequirementStatus)
+                    ? 'active'
+                    : ''
+                }`}
+                style={
+                  statusFilter !== 'all' && LOW_FREQ_STATUSES.includes(statusFilter as RequirementStatus)
+                    ? undefined
                     : moreOpen
-                      ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-                  }`}
-                  title="更多状态"
-                >
-                  ⋯ 更多
-                </button>
-                {moreOpen &&
-                  morePos &&
-                  createPortal(
-                    <>
-                      {/* 外部点击关闭层：z-40，比 header 低、不抢弹窗 */}
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setMoreOpen(false)}
-                      />
-                      {/* 下拉面板：z-50（在 backdrop 之上），fixed 定位脱离父级堆叠上下文 */}
-                      <div
-                        className="fixed z-50 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800"
-                        style={{ top: morePos.top, right: morePos.right }}
-                      >
-                        {LOW_FREQ_STATUSES.map((s) => {
-                          const selected = statusFilter === s
-                          return (
-                            <button
-                              key={s}
-                              onClick={() => {
-                                setStatusFilter(s)
-                                setMoreOpen(false)
-                              }}
-                              className={`flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs transition ${
-                                selected
-                                  ? 'bg-indigo-50 font-medium text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400'
-                                  : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50'
-                              }`}
-                            >
-                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusMeta(s).dot}`} />
-                              {statusMeta(s).label}
-                              <span className="ml-auto opacity-70">{counts[s]}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </>,
-                    document.body,
-                  )}
-              </div>
+                      ? { background: 'var(--wb-surface-2)', color: 'var(--wb-ink)' }
+                      : undefined
+                }
+                title="更多状态"
+              >
+                ⋯ 更多
+              </button>
+              {moreOpen &&
+                morePos &&
+                createPortal(
+                  <>
+                    {/* 外部点击关闭层：z-40，比 header 低、不抢弹窗 */}
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setMoreOpen(false)}
+                    />
+                    {/* 下拉面板：z-50（在 backdrop 之上），fixed 定位脱离父级堆叠上下文 */}
+                    <div
+                      className="fixed z-50 w-36 overflow-hidden rounded-xl shadow-lg"
+                      style={{ top: morePos.top, right: morePos.right, background: 'var(--wb-surface)', border: '1px solid var(--wb-line)' }}
+                    >
+                      {LOW_FREQ_STATUSES.map((s) => {
+                        const selected = statusFilter === s
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              setStatusFilter(s)
+                              setMoreOpen(false)
+                            }}
+                            className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs transition"
+                            style={{
+                              color: 'var(--wb-ink-2)',
+                              fontWeight: selected ? 600 : 500,
+                              background: selected ? BRAND_SOFT : 'transparent',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!selected) e.currentTarget.style.background = 'var(--wb-surface-2)'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = selected ? BRAND_SOFT : 'transparent'
+                            }}
+                          >
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusMeta(s).dot}`} />
+                            {statusMeta(s).label}
+                            <span style={{ marginLeft: 'auto', opacity: 0.7 }}>{counts[s]}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>,
+                  document.body,
+                )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Select
               className="flex-1 sm:w-40 sm:flex-none"
               placeholder="全部项目"
@@ -544,11 +557,12 @@ export function RequirementTable({
             {/* 批量操作开关：开启后行首才出现复选框 */}
             <button
               onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition ${
+              className="wb-btn-ghost"
+              style={
                 selectMode
-                  ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/15 dark:text-indigo-400'
-                  : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
-              }`}
+                  ? { borderColor: 'var(--wb-brand-400)', color: 'var(--wb-brand-500)', background: BRAND_SOFT }
+                  : undefined
+              }
               title={selectMode ? '退出批量选择（Esc）' : '批量选择'}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -559,9 +573,9 @@ export function RequirementTable({
           </div>
         </div>
 
-        <div className="relative">
+        {/* 搜索 */}
+        <div className="wb-search" style={{ marginLeft: 'auto', width: '100%', maxWidth: 300 }}>
           <svg
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
             width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
           >
             <circle cx="11" cy="11" r="7" />
@@ -569,26 +583,29 @@ export function RequirementTable({
           </svg>
           <input
             ref={searchInputRef}
-            className="input w-full pl-9 pr-9 lg:w-64"
+            className="wb-input"
+            style={{ width: '100%' }}
             placeholder="搜索名称 / 分支 / 模块 / 备注…"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
-          {keyword === '' && (
-            <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 hidden rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-500 sm:block">
-              /
-            </kbd>
-          )}
+          {keyword === '' && <kbd className="hidden sm:block">/</kbd>}
         </div>
       </div>
 
       {/* 批量操作工具栏：仅批量模式下展示 */}
       {selectMode && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 dark:border-indigo-500/30 dark:bg-indigo-500/10">
-          <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+        <div
+          className="wb-card"
+          style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10,
+            padding: '10px 14px', marginBottom: 14, background: 'var(--wb-surface-2)',
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--wb-ink)' }}>
             {selectedIds.size > 0 ? `已选 ${selectedIds.size} 项` : '批量模式：勾选行首复选框'}
           </span>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <Select
               size="sm"
               className="w-32"
@@ -602,20 +619,14 @@ export function RequirementTable({
               }}
               options={statusSelectOptions}
             />
-            <button
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              onClick={handleBatchExport}
-            >
+            <button className="wb-btn-ghost" onClick={handleBatchExport}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
               </svg>
               导出选中
             </button>
             {onBatchDelete && (
-              <button
-                className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-rose-700"
-                onClick={() => setBatchDeleteIds([...selectedIds])}
-              >
+              <button className="wb-btn-danger-soft" onClick={() => setBatchDeleteIds([...selectedIds])}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z" />
                 </svg>
@@ -623,7 +634,8 @@ export function RequirementTable({
               </button>
             )}
             <button
-              className="rounded-lg px-2 py-1.5 text-xs text-slate-500 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              className="rounded-lg px-2 py-1.5 text-xs"
+              style={{ color: 'var(--wb-ink-3)' }}
               onClick={exitSelectMode}
               title="快捷键 Esc"
             >
@@ -634,12 +646,12 @@ export function RequirementTable({
       )}
 
       {/* 列表区：桌面表格 / 移动端卡片 */}
-      <div className="card overflow-hidden">
+      <div className="wb-card overflow-hidden">
         {loading ? (
           <>
             {/* 桌面骨架行 */}
             <div className="hidden overflow-x-auto md:block">
-              <table className={`w-full text-sm ${selectMode ? 'min-w-[1140px]' : 'min-w-[1100px]'}`}>
+              <table className={`wb-table ${selectMode ? 'min-w-[1140px]' : 'min-w-[1100px]'}`}>
                 <SkeletonRows rows={5} cols={selectMode ? 7 : 6} />
               </table>
             </div>
@@ -648,11 +660,12 @@ export function RequirementTable({
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="animate-pulse space-y-2.5 rounded-xl border border-slate-100 p-4 dark:border-slate-800/60"
+                  className="animate-pulse space-y-2.5 rounded-xl p-4"
+                  style={{ background: 'var(--wb-surface-2)' }}
                 >
-                  <div className="h-3.5 w-2/3 rounded bg-slate-100 dark:bg-slate-800" />
-                  <div className="h-3 w-1/2 rounded bg-slate-100 dark:bg-slate-800" />
-                  <div className="h-3 w-5/6 rounded bg-slate-100 dark:bg-slate-800" />
+                  <div className="h-3.5 w-2/3 rounded" style={{ background: 'var(--wb-line)' }} />
+                  <div className="h-3 w-1/2 rounded" style={{ background: 'var(--wb-line)' }} />
+                  <div className="h-3 w-5/6 rounded" style={{ background: 'var(--wb-line)' }} />
                 </div>
               ))}
             </div>
@@ -669,7 +682,7 @@ export function RequirementTable({
               title="没有匹配的需求"
               subtitle="试试调整筛选条件或搜索关键词"
               action={
-                <button className="btn-ghost text-sm" onClick={clearFilters}>
+                <button className="wb-btn-ghost" onClick={clearFilters}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                     <path d="M3 3v5h5" />
@@ -694,21 +707,22 @@ export function RequirementTable({
           <>
             {/* 桌面表格 */}
             <div className="hidden overflow-x-auto md:block">
-              <table className={`w-full text-sm ${selectMode ? 'min-w-[1140px]' : 'min-w-[1100px]'}`}>
+              <table className={`wb-table ${selectMode ? 'min-w-[1140px]' : 'min-w-[1100px]'}`}>
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
+                  <tr>
                     {selectMode && (
-                      <th className="w-10 px-3 py-3">
+                      <th className="w-10" style={{ textAlign: 'center' }}>
                         <input
                           type="checkbox"
                           checked={allFilteredSelected}
                           onChange={toggleSelectAll}
-                          className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700"
+                          className="h-4 w-4 cursor-pointer rounded"
+                          style={checkboxStyle}
                         />
                       </th>
                     )}
                     <th
-                      className="cursor-pointer select-none px-4 py-3 hover:text-slate-700 dark:hover:text-slate-200"
+                      className="cursor-pointer select-none transition"
                       onClick={() => toggleSort('name')}
                     >
                       <span className="inline-flex items-center gap-1">
@@ -716,10 +730,10 @@ export function RequirementTable({
                         <SortIcon active={sortField === 'name'} dir={sortDir} />
                       </span>
                     </th>
-                    <th className="min-w-[240px] px-4 py-3">项目 / 分支</th>
-                    <th className="px-4 py-3">发布模块</th>
+                    <th className="min-w-[240px]">项目 / 分支</th>
+                    <th>发布模块</th>
                     <th
-                      className="cursor-pointer select-none px-4 py-3 hover:text-slate-700 dark:hover:text-slate-200"
+                      className="cursor-pointer select-none"
                       onClick={() => toggleSort('status')}
                     >
                       <span className="inline-flex items-center gap-1">
@@ -727,8 +741,8 @@ export function RequirementTable({
                         <SortIcon active={sortField === 'status'} dir={sortDir} />
                       </span>
                     </th>
-                    <th className="min-w-[340px] px-4 py-3">时间</th>
-                    <th className="sticky right-0 z-10 bg-slate-50 px-4 py-3 text-right dark:bg-slate-800/60">
+                    <th className="min-w-[340px]">时间</th>
+                    <th className="sticky right-0 z-10" style={{ textAlign: 'right', boxShadow: '-4px 0 8px -4px rgba(0,0,0,.06)' }}>
                       操作
                     </th>
                   </tr>
@@ -738,83 +752,80 @@ export function RequirementTable({
                   return (
                     <tr
                       key={r.id}
-                      className={`border-b border-slate-100 transition last:border-0 hover:bg-slate-50/70 dark:border-slate-800/60 dark:hover:bg-slate-800/40 ${selectedIds.has(r.id) ? 'bg-indigo-50/50 dark:bg-indigo-500/5' : ''}`}
+                      style={selectedIds.has(r.id) ? { background: BRAND_SOFT } : undefined}
                     >
                       {selectMode && (
-                        <td className="px-3 py-3">
+                        <td style={{ textAlign: 'center' }}>
                           <input
                             type="checkbox"
                             checked={selectedIds.has(r.id)}
                             onChange={() => toggleSelect(r.id)}
-                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700"
+                            className="h-4 w-4 cursor-pointer rounded"
+                            style={checkboxStyle}
                           />
                         </td>
                       )}
-                      <td className="px-4 py-3">
+                      <td>
                         <div
-                          className="cursor-pointer font-medium text-slate-800 transition hover:text-indigo-600 dark:text-slate-100 dark:hover:text-indigo-400"
+                          className="wb-req-name"
                           onClick={() => setDrawerId(r.id)}
                           title="点击查看详情"
                         >
                           {highlight(r.name, keyword)}
                         </div>
                         {r.remark && (
-                          <div className="mt-0.5 max-w-[260px] truncate text-xs text-slate-400">
+                          <div className="wb-remark">
                             {highlight(r.remark, keyword)}
                           </div>
                         )}
                         <TestDueBadge r={r} />
                       </td>
-                      <td className="min-w-[240px] px-4 py-3">
+                      <td className="min-w-[240px]">
                         <div className="flex max-w-[240px] flex-wrap items-center gap-1">
                           {requirementProjectNames(r).length > 0 ? (
                             requirementProjectNames(r).map((name) => (
                               <span
                                 key={name}
-                                className="max-w-[240px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                className="wb-chip"
+                                style={{ background: 'var(--wb-surface-2)', color: 'var(--wb-ink-2)', maxWidth: 240 }}
                                 title={name}
                               >
                                 {highlight(name, keyword)}
                               </span>
                             ))
                           ) : (
-                            <span className="text-slate-400">—</span>
+                            <span style={{ color: 'var(--wb-ink-3)' }}>—</span>
                           )}
                         </div>
                         <code
                           onClick={() => copyWithFeedback(r.branch, setCopiedBranch)}
-                          className={`mt-0.5 inline-block max-w-[240px] cursor-pointer truncate rounded px-1.5 py-0.5 text-xs transition ${
-                            copiedBranch === r.branch
-                              ? 'bg-emerald-100 font-medium text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
-                              : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200'
-                          }`}
+                          className="wb-code"
+                          style={copiedBranch === r.branch ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 } : undefined}
                           title={r.branch ? '点击复制分支名' : undefined}
                         >
                           {copiedBranch === r.branch ? '✓ 已复制' : (r.branch ? highlight(r.branch, keyword) : '—')}
                         </code>
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         {requirementModuleDisplay(r) ? (
                           <code
                             onClick={() => copyWithFeedback(requirementModuleDisplay(r), setCopiedModule)}
-                            className={`inline-block max-w-[200px] cursor-pointer truncate rounded px-1.5 py-0.5 text-xs font-medium transition ${
-                              copiedModule === requirementModuleDisplay(r)
-                                ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
-                                : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-400 dark:hover:bg-indigo-500/25'
-                            }`}
+                            className="wb-code module"
+                            style={copiedModule === requirementModuleDisplay(r) ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 } : undefined}
                             title="点击复制发布模块"
                           >
                             {copiedModule === requirementModuleDisplay(r) ? '✓ 已复制' : highlight(requirementModuleDisplay(r), keyword)}
                           </code>
                         ) : (
-                          <span className="text-slate-300 dark:text-slate-600">—</span>
+                          <span style={{ color: 'var(--wb-ink-3)', opacity: 0.6 }}>—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setStatusFilter(r.status)}
-                            className="group/dot shrink-0 rounded-full p-1 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                            className="group/dot shrink-0 rounded-full p-1 transition"
+                            style={{ color: 'var(--wb-ink-3)' }}
                             title={`筛选「${statusMeta(r.status).label}」状态`}
                           >
                             <span className={`block h-2.5 w-2.5 rounded-full transition group-hover/dot:scale-125 ${statusMeta(r.status).dot}`} />
@@ -827,14 +838,14 @@ export function RequirementTable({
                           />
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3">
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <TimeCell r={r} />
                       </td>
-                      <td className="sticky right-0 z-10 bg-white px-4 py-3 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)] dark:bg-[#0f1521] dark:shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.3)]">
-                        <div className="flex justify-end gap-1">
+                      <td className="sticky right-0 z-10" style={{ background: 'var(--wb-surface)', boxShadow: '-4px 0 8px -4px rgba(0,0,0,.08)' }}>
+                        <div className="wb-row-actions">
                           <button
                             onClick={() => setDrawerId(r.id)}
-                            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+                            className="wb-icon-sm"
                             title="查看详情"
                           >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -845,7 +856,7 @@ export function RequirementTable({
                           {onClone && (
                             <button
                               onClick={() => onClone(r)}
-                              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+                              className="wb-icon-sm"
                               title="克隆（以当前需求为模板新建）"
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -856,7 +867,7 @@ export function RequirementTable({
                           )}
                           <button
                             onClick={() => setDeleteId(r.id)}
-                            className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+                            className="wb-icon-sm danger"
                             title="删除"
                           >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -873,7 +884,7 @@ export function RequirementTable({
             </div>
 
             {/* 移动端卡片列表 */}
-            <div className="divide-y divide-slate-100 md:hidden dark:divide-slate-800/60">
+            <div className="md:hidden">
               {filtered.map((r) => (
                 <RequirementCard
                   key={r.id}
@@ -898,7 +909,7 @@ export function RequirementTable({
         )}
       </div>
 
-      <p className="text-xs text-slate-400 dark:text-slate-500">
+      <p style={{ fontSize: 12, color: 'var(--wb-ink-3)', marginTop: 12 }}>
         共 {filtered.length} 条需求
       </p>
 
@@ -942,13 +953,13 @@ export function RequirementTable({
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) {
     return (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-30">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
         <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
       </svg>
     )
   }
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-500">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--wb-brand-500)' }}>
       {dir === 'asc' ? <path d="m7 15 5-5 5 5" /> : <path d="m7 9 5 5 5-5" />}
     </svg>
   )
@@ -991,7 +1002,13 @@ function RequirementCard({
 }) {
   const meta = statusMeta(r.status)
   return (
-    <div className={`space-y-2 px-4 py-3.5 ${selected ? 'bg-indigo-50/50 dark:bg-indigo-500/5' : ''}`}>
+    <div
+      className="space-y-2 px-4 py-3.5"
+      style={{
+        background: selected ? BRAND_SOFT : undefined,
+        borderBottom: '1px solid var(--wb-line)',
+      }}
+    >
       {/* 首行：批量模式下的复选框 + 状态 chip + 操作 */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -1000,22 +1017,23 @@ function RequirementCard({
               type="checkbox"
               checked={selected}
               onChange={onToggleSelect}
-              className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-700"
+              className="h-4 w-4 cursor-pointer rounded"
+              style={{ accentColor: 'var(--wb-brand-500)' }}
             />
           )}
           <button
             onClick={() => onFilterStatus(r.status)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.color} bg-slate-100 dark:bg-slate-800`}
+            className={`wb-chip st-${r.status}`}
             title={`筛选「${meta.label}」状态`}
           >
-            <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+            <span className="dot" />
             {meta.label}
           </button>
         </div>
         <div className="flex gap-1">
           <button
             onClick={onEdit}
-            className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+            className="wb-icon-sm"
             title="编辑"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1025,7 +1043,7 @@ function RequirementCard({
           {onClone && (
             <button
               onClick={onClone}
-              className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+              className="wb-icon-sm"
               title="克隆"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1036,7 +1054,7 @@ function RequirementCard({
           )}
           <button
             onClick={onDelete}
-            className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+            className="wb-icon-sm danger"
             title="删除"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1048,14 +1066,18 @@ function RequirementCard({
 
       {/* 需求名 + 备注 */}
       <div
-        className="cursor-pointer font-medium leading-snug text-slate-800 transition active:text-indigo-600 dark:text-slate-100 dark:active:text-indigo-400"
+        className="cursor-pointer font-medium leading-snug transition"
+        style={{ color: 'var(--wb-ink)' }}
         onClick={onOpen}
         title="点击查看详情"
       >
         {highlight(r.name, keyword)}
       </div>
       {r.remark && (
-        <div className="line-clamp-2 text-xs leading-relaxed text-slate-400">
+        <div
+          className="line-clamp-2 text-xs leading-relaxed"
+          style={{ color: 'var(--wb-ink-3)' }}
+        >
           {highlight(r.remark, keyword)}
         </div>
       )}
@@ -1064,18 +1086,18 @@ function RequirementCard({
       {/* 项目 / 分支 / 模块 */}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         {requirementProjectDisplay(r) && (
-          <span className="min-w-0 max-w-full truncate text-slate-500 dark:text-slate-400">
+          <span
+            className="min-w-0 max-w-full truncate"
+            style={{ color: 'var(--wb-ink-2)' }}
+          >
             {highlight(requirementProjectDisplay(r), keyword)}
           </span>
         )}
         {r.branch && (
           <code
             onClick={() => onCopyBranch(r.branch)}
-            className={`min-w-0 max-w-full cursor-pointer truncate rounded px-1.5 py-0.5 transition ${
-              copiedBranch === r.branch
-                ? 'bg-emerald-100 font-medium text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
-                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-            }`}
+            className="wb-code"
+            style={copiedBranch === r.branch ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 } : undefined}
             title="点击复制分支名"
           >
             {copiedBranch === r.branch ? '✓ 已复制' : highlight(r.branch, keyword)}
@@ -1084,11 +1106,8 @@ function RequirementCard({
         {requirementModuleDisplay(r) && (
           <code
             onClick={() => onCopyModule(requirementModuleDisplay(r))}
-            className={`min-w-0 max-w-full cursor-pointer truncate rounded px-1.5 py-0.5 font-medium transition ${
-              copiedModule === requirementModuleDisplay(r)
-                ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
-                : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400'
-            }`}
+            className="wb-code module"
+            style={copiedModule === requirementModuleDisplay(r) ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 } : undefined}
             title="点击复制发布模块"
           >
             {copiedModule === requirementModuleDisplay(r) ? '✓ 已复制' : highlight(requirementModuleDisplay(r), keyword)}

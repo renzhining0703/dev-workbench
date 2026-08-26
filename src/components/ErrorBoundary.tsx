@@ -30,27 +30,33 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-900">
-        <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-xl dark:bg-red-900/30">
+      <div className="flex min-h-screen items-center justify-center p-6" style={{ background: 'var(--wb-surface-2)' }}>
+        <div className="wb-card w-full max-w-md p-6 text-center">
+          <div
+            className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full text-xl"
+            style={{ background: 'var(--wb-danger-soft)' }}
+          >
             ⚠️
           </div>
-          <h1 className="mb-2 text-lg font-semibold text-slate-800 dark:text-slate-100">
+          <h1 className="mb-2 text-lg font-semibold" style={{ color: 'var(--wb-ink)' }}>
             页面渲染出错
           </h1>
-          <p className="mb-1 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mb-1 text-sm" style={{ color: 'var(--wb-ink-2)' }}>
             本地数据仍在，仅是界面渲染被异常数据打断。可尝试重试；
           </p>
-          <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mb-4 text-sm" style={{ color: 'var(--wb-ink-2)' }}>
             若反复出错，请导出数据备份后反馈此错误信息。
           </p>
-          <pre className="mb-4 max-h-32 overflow-auto rounded-lg bg-slate-100 p-3 text-left text-xs text-red-600 dark:bg-slate-900 dark:text-red-400">
+          <pre
+            className="mb-4 max-h-32 overflow-auto rounded-lg p-3 text-left text-xs"
+            style={{ background: 'var(--wb-surface-2)', color: 'var(--wb-danger)' }}
+          >
             {this.state.error.message}
           </pre>
           <button
             type="button"
             onClick={this.handleReset}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="wb-btn-primary"
           >
             重试
           </button>

@@ -384,118 +384,61 @@ function AppInner({
       />
 
       {archiveToast && (
-        <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
-          <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-amber-200 bg-white px-4 py-3 shadow-lg dark:border-amber-500/30 dark:bg-slate-900">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" />
-              </svg>
+        <div className="wb-toast">
+          <span className="dot" />
+          <div style={{ flex: 1 }}>
+            <b>已自动归档 {archiveToast.count} 条需求</b>
+            <div style={{ fontSize: 11.5, opacity: 0.75, marginTop: 1 }}>
+              上线超过 {archiveToast.months} 个月，自动移入归档视图
             </div>
-            <div className="flex-1 text-sm text-slate-700 dark:text-slate-200">
-              <p className="font-medium">
-                已自动归档 {archiveToast.count} 条需求
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                上线超过 {archiveToast.months} 个月，自动移入归档视图
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setArchiveToast(null)}
-              className="rounded px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-              aria-label="关闭"
-            >
-              知道了
-            </button>
           </div>
+          <button onClick={() => setArchiveToast(null)}>知道了</button>
         </div>
       )}
 
       {undoToast && (
-        <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
-          <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-500 text-white shadow-sm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                已删除「{undoToast.label}」
-              </p>
-              <p className="text-xs text-slate-400">5 秒内可撤销</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleUndoDelete}
-              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700"
-            >
-              撤销
-            </button>
-            <button
-              type="button"
-              onClick={() => setUndoToast(null)}
-              className="rounded px-1.5 py-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              aria-label="关闭"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
+        <div className="wb-toast">
+          <span className="dot" />
+          <div style={{ flex: 1 }}>
+            <b>已删除「{undoToast.label}」</b>
+            <div style={{ fontSize: 11.5, opacity: 0.75, marginTop: 1 }}>5 秒内可撤销</div>
           </div>
+          <button onClick={handleUndoDelete}>撤销</button>
+          <button onClick={() => setUndoToast(null)} aria-label="关闭">✕</button>
         </div>
       )}
 
       {notifyToast && (
-        <div className="fixed inset-x-0 bottom-0 z-[100] p-3">
-          <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-sm ${notifyToast.tone === 'ok' ? 'bg-indigo-600' : 'bg-amber-500'}`}>
-              {notifyToast.tone === 'ok' ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />
-                </svg>
-              )}
-            </div>
-            <div className="flex-1 text-sm text-slate-700 dark:text-slate-200">
-              <p className="font-medium">{notifyToast.title}</p>
-              {notifyToast.desc && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">{notifyToast.desc}</p>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setNotifyToast(null)}
-              className="rounded px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-              aria-label="关闭"
-            >
-              知道了
-            </button>
+        <div className="wb-toast">
+          <span className="dot" style={{ background: notifyToast.tone === 'ok' ? 'var(--wb-success)' : 'var(--wb-accent)' }} />
+          <div style={{ flex: 1 }}>
+            <b>{notifyToast.title}</b>
+            {notifyToast.desc && (
+              <div style={{ fontSize: 11.5, opacity: 0.75, marginTop: 1 }}>{notifyToast.desc}</div>
+            )}
           </div>
+          <button onClick={() => setNotifyToast(null)}>知道了</button>
         </div>
       )}
 
-      {/* 顶栏 */}
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-lg dark:border-slate-800 dark:bg-[#0b1220]/80">
-        <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm sm:h-9 sm:w-9">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M4 6h16M4 12h16M4 18h10" />
-            </svg>
-          </div>
-          <div className="min-w-0 shrink-0">
-            <h1 className="whitespace-nowrap text-sm font-bold text-slate-800 sm:text-base dark:text-slate-100">
-              开发工作台
-            </h1>
-            <p className="hidden text-[11px] text-slate-400 sm:block">
-              {format(new Date(), 'yyyy年M月d日 EEEE', { locale: zhCN })}
-            </p>
+      {/* 顶栏（NOVA：深绿品牌条） */}
+      <header className="wb-header">
+        <div className="wb-header-inner">
+          <div className="wb-logo">
+            <div className="wb-logo-mark">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M4 6h16M4 12h16M4 18h10" />
+              </svg>
+            </div>
+            <div>
+              <div className="wb-logo-name">开发工作台</div>
+              <div className="wb-logo-date">
+                {format(new Date(), 'yyyy年M月d日 EEEE', { locale: zhCN })}
+              </div>
+            </div>
           </div>
 
-          <nav className="ml-4 hidden items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800 sm:flex">
+          <nav className="wb-nav">
             {(
               [
                 ['today', '今日概览'],
@@ -507,19 +450,16 @@ function AppInner({
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`whitespace-nowrap rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
-                  tab === key
-                    ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-400'
-                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
+                className={`wb-nav-btn ${tab === key ? 'active' : ''}`}
               >
+                <span className="nav-dot" />
                 {label}
               </button>
             ))}
           </nav>
 
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <button className="btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }} title="新建需求（快捷键 N）">
+          <div className="wb-header-actions">
+            <button className="wb-btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }} title="新建需求（快捷键 N）">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
@@ -530,7 +470,7 @@ function AppInner({
             <div className="relative" ref={mobileMenuRef}>
               <button
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 sm:h-9 sm:w-9"
+                className="wb-icon-btn"
                 aria-label="更多操作"
                 title="更多操作"
               >
@@ -543,9 +483,10 @@ function AppInner({
 
               {mobileMenuOpen && (
                 <>
-                  <div className="absolute right-0 top-full z-50 mt-1.5 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                  <div className="wb-card absolute right-0 top-full z-50 mt-1.5 w-44 py-1">
                     <button
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                      style={{ color: 'var(--wb-ink-2)' }}
                       onClick={() => { setMobileMenuOpen(false); setExportOpen(true) }}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -554,7 +495,8 @@ function AppInner({
                       按月导出
                     </button>
                     <button
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                      style={{ color: 'var(--wb-ink-2)' }}
                       onClick={() => { setMobileMenuOpen(false); setImportOpen(true) }}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -563,7 +505,8 @@ function AppInner({
                       导入数据
                     </button>
                     <button
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                      style={{ color: 'var(--wb-ink-2)' }}
                       onClick={() => { setMobileMenuOpen(false); setBackupOpen(true) }}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -574,7 +517,8 @@ function AppInner({
                       数据备份
                     </button>
                     <button
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                      style={{ color: 'var(--wb-ink-2)' }}
                       onClick={() => { setMobileMenuOpen(false); setProjectOpen(true) }}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -583,9 +527,10 @@ function AppInner({
                       </svg>
                       项目管理
                     </button>
-                    <div className="my-1 border-t border-slate-100 dark:border-slate-700/60" />
+                    <div className="my-1 border-t" style={{ borderColor: 'var(--wb-line)' }} />
                     <button
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                      style={{ color: 'var(--wb-ink-2)' }}
                       onClick={() => { setMobileMenuOpen(false); setShortcutsOpen(true) }}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -595,7 +540,8 @@ function AppInner({
                       快捷键
                     </button>
                     <button
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                      style={{ color: 'var(--wb-ink-2)' }}
                       onClick={() => { setMobileMenuOpen(false); setPreferencesOpen(true) }}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -606,7 +552,8 @@ function AppInner({
                     </button>
                     {notifySupported && !notifyGranted && (
                       <button
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                      style={{ color: 'var(--wb-ink-2)' }}
                         onClick={() => { setMobileMenuOpen(false); requestNotify() }}
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -626,7 +573,7 @@ function AppInner({
             ) : (
               <button
                 onClick={() => auth.showLogin('login')}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 sm:py-2"
+                className="rounded-lg border border-white/25 px-3 py-1.5 text-xs font-medium text-white/90 transition hover:bg-white/10"
                 aria-label="登录"
               >
                 登录
@@ -635,7 +582,7 @@ function AppInner({
 
             <button
               onClick={toggle}
-              className="rounded-lg border border-slate-200 p-1.5 text-slate-400 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 sm:p-2"
+              className="wb-icon-btn"
               aria-label="切换主题"
               title={theme === 'dark' ? '切换到浅色' : '切换到深色'}
             >
@@ -653,7 +600,8 @@ function AppInner({
           </div>
         </div>
 
-        <div className="flex gap-1 border-t border-slate-200 px-3 py-1.5 dark:border-slate-800 sm:hidden">
+        {/* 移动端 Tab 栏 */}
+        <div className="flex gap-1 border-t border-white/10 px-3 py-1.5 sm:hidden">
           {(
             [
               ['today', '今日概览'],
@@ -667,8 +615,8 @@ function AppInner({
               onClick={() => setTab(key)}
               className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                 tab === key
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-500 dark:text-slate-400'
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/55 hover:text-white/85'
               }`}
             >
               {label}
@@ -677,9 +625,12 @@ function AppInner({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <main className="wb-main">
         {importBanner && (
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+          <div
+            className="mb-4 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm"
+            style={{ borderColor: 'var(--wb-line)', background: 'var(--wb-warn-soft)', color: 'var(--wb-warn)' }}
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <path d="M12 16v-4M12 8h.01" />
@@ -687,7 +638,7 @@ function AppInner({
             <span className="flex-1">{importBanner}</span>
             <button
               onClick={() => setImportBanner('')}
-              className="text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200"
+              className="transition hover:opacity-70"
               aria-label="关闭提示"
             >
               ✕
@@ -695,7 +646,7 @@ function AppInner({
           </div>
         )}
         {tab === 'today' ? (
-          <div className="space-y-5">
+          <div className="wb-view active">
             <PublishReminder requirements={store.requirements} />
             <TodoPanel
               todos={store.todos}
@@ -709,27 +660,25 @@ function AppInner({
             />
           </div>
         ) : tab === 'todo' ? (
-          <TodoView
-            todos={store.todos}
-            requirements={store.requirements}
-            onAddTodo={store.addTodo}
-            onToggleTodo={store.toggleTodo}
-            onUpdateTodo={store.updateTodo}
-            onRemoveTodo={store.removeTodo}
-            onOpenRequirement={jumpToRequirement}
-          />
+          <div className="wb-view active">
+            <TodoView
+              todos={store.todos}
+              requirements={store.requirements}
+              onAddTodo={store.addTodo}
+              onToggleTodo={store.toggleTodo}
+              onUpdateTodo={store.updateTodo}
+              onRemoveTodo={store.removeTodo}
+              onOpenRequirement={jumpToRequirement}
+            />
+          </div>
         ) : tab === 'list' ? (
           <>
-            <div className="mb-3 inline-flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
+            <div className="wb-pills mb-4">
               {(['table', 'kanban'] as const).map((v) => (
                 <button
                   key={v}
                   onClick={() => setListView(v)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                    listView === v
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                  }`}
+                  className={`wb-pill ${listView === v ? 'active' : ''}`}
                 >
                   {v === 'table' ? '📋 表格' : '🗂 看板'}
                 </button>
@@ -758,7 +707,9 @@ function AppInner({
             )}
           </>
         ) : (
-          <StatsView requirements={store.requirements} />
+          <div className="wb-view active">
+            <StatsView requirements={store.requirements} />
+          </div>
         )}
       </main>
 

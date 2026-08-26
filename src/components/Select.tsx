@@ -176,18 +176,19 @@ export function Select<T extends string>({
         onKeyDown={onTriggerKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
+        style={{
+          background: 'var(--wb-surface)',
+          color: 'var(--wb-ink)',
+          borderColor: open ? 'var(--wb-brand-500)' : 'var(--wb-line-2)',
+          boxShadow: open ? '0 0 0 3px rgba(42,112,86,.13)' : undefined,
+        }}
         className={`inline-flex items-center justify-between gap-2 rounded-lg border px-3 text-left transition ${sizeCls}
           ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
-          ${
-            open
-              ? 'border-indigo-500 ring-2 ring-indigo-500/20 dark:border-indigo-400 dark:ring-indigo-400/20'
-              : 'border-slate-300 hover:border-slate-400 dark:border-slate-700 dark:hover:border-slate-600'
-          }
-          bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-200 ${className}`}
+          hover:border-[var(--wb-brand-400)] ${className}`}
       >
         <span
           className={`flex min-w-0 flex-1 items-center gap-1.5 truncate ${selected?.color ?? ''} ${
-            !selected ? 'text-slate-400 dark:text-slate-500' : ''
+            !selected ? 'opacity-60' : ''
           }`}
         >
           {selected?.dot && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${selected.dot}`} />}
@@ -202,7 +203,8 @@ export function Select<T extends string>({
               onClear?.()
               close()
             }}
-            className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            className="shrink-0 rounded p-0.5 transition"
+            style={{ color: 'var(--wb-ink-3)' }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M18 6 6 18M6 6l12 12" />
@@ -218,7 +220,8 @@ export function Select<T extends string>({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          style={{ color: 'var(--wb-ink-3)' }}
         >
           <path d="m6 9 6 6 6-6" />
         </svg>
@@ -237,11 +240,13 @@ export function Select<T extends string>({
               minWidth: pos.width,
               maxWidth: pos.maxWidth,
               zIndex: 9999,
+              background: 'var(--wb-surface)',
+              border: '1px solid var(--wb-line)',
             }}
-            className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/40"
+            className="overflow-hidden rounded-xl shadow-xl"
           >
             {searchable && (
-              <div className="border-b border-slate-100 p-1.5 dark:border-slate-700">
+              <div className="border-b p-1.5" style={{ borderColor: 'var(--wb-line)' }}>
                 <input
                   ref={searchRef}
                   value={query}
@@ -250,13 +255,20 @@ export function Select<T extends string>({
                     setHl(0)
                   }}
                   placeholder="搜索…"
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:focus:border-indigo-400"
+                  style={{
+                    background: 'var(--wb-surface-2)',
+                    color: 'var(--wb-ink)',
+                    borderColor: 'var(--wb-line-2)',
+                  }}
+                  className="w-full rounded-lg border px-2.5 py-1.5 text-xs outline-none transition focus:border-[var(--wb-brand-500)]"
                 />
               </div>
             )}
             <div className="max-h-64 overflow-y-auto p-1">
               {filtered.length === 0 && (
-                <div className="px-3 py-4 text-center text-xs text-slate-400 dark:text-slate-500">无匹配选项</div>
+                <div className="px-3 py-4 text-center text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+                  无匹配选项
+                </div>
               )}
               {filtered.map((opt, i) => {
                 const isHl = i === hl
@@ -269,14 +281,15 @@ export function Select<T extends string>({
                     aria-selected={isSel}
                     onClick={() => pick(opt)}
                     onMouseEnter={() => setHl(i)}
+                    style={{ background: isHl ? 'rgba(42,112,86,.1)' : 'transparent' }}
                     className={`flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 transition ${itemCls}
-                      ${opt.disabled ? 'cursor-not-allowed opacity-40' : ''}
-                      ${isHl ? 'bg-indigo-50 dark:bg-indigo-500/15' : ''}`}
+                      ${opt.disabled ? 'cursor-not-allowed opacity-40' : ''}`}
                   >
                     <span
                       className={`flex min-w-0 items-center gap-1.5 truncate ${
-                        opt.color ?? 'text-slate-700 dark:text-slate-300'
+                        opt.color ?? ''
                       }`}
+                      style={opt.color ? undefined : { color: 'var(--wb-ink-2)' }}
                     >
                       {opt.dot && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${opt.dot}`} />}
                       {opt.label}
@@ -291,7 +304,8 @@ export function Select<T extends string>({
                         strokeWidth="2.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="shrink-0 text-indigo-600 dark:text-indigo-400"
+                        className="shrink-0"
+                        style={{ color: 'var(--wb-brand-500)' }}
                       >
                         <path d="M20 6 9 17l-5-5" />
                       </svg>

@@ -116,11 +116,11 @@ export function RequirementKanban({
   // 整体空（没有任何看板内的需求）
   if (inKanban.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center dark:border-slate-700 dark:bg-slate-900">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+      <div className="rounded-2xl border border-dashed border-[var(--wb-line-2)] bg-[var(--wb-surface)] p-12 text-center">
+        <p className="text-sm" style={{ color: 'var(--wb-ink-2)' }}>
           当前没有「待开发 / 开发中 / 测试中 / 待上线」状态的需求
         </p>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
           其他状态（暂停 / 已上线 / 已归档）请切换到「表格」视图查看
         </p>
       </div>
@@ -133,7 +133,8 @@ export function RequirementKanban({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative">
           <svg
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+            style={{ color: 'var(--wb-ink-3)' }}
             width="15"
             height="15"
             viewBox="0 0 24 24"
@@ -147,13 +148,13 @@ export function RequirementKanban({
           </svg>
           <input
             ref={searchInputRef}
-            className="input w-full pl-9 sm:w-72"
+            className="wb-input w-full pl-9 sm:w-72"
             placeholder="搜索看板内需求..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
-        <span className="text-xs text-slate-400 dark:text-slate-500">
+        <span className="text-xs" style={{ color: 'var(--wb-ink-3)' }}>
           看板共 {inKanban.length} 个任务
         </span>
       </div>
@@ -170,21 +171,28 @@ export function RequirementKanban({
               onDragOver={(e) => onColumnDragOver(e, col)}
               onDragLeave={(e) => onColumnDragLeave(e, col)}
               onDrop={(e) => onColumnDrop(e, col)}
-              className={`flex flex-col rounded-xl border transition ${
+              className="flex flex-col rounded-xl border transition"
+              style={
                 isOver
-                  ? 'border-indigo-400 bg-indigo-50/60 shadow-md dark:border-indigo-500 dark:bg-indigo-500/15'
-                  : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/40'
-              }`}
+                  ? { borderColor: 'var(--wb-brand-400)', background: 'rgba(42,112,86,.08)', boxShadow: 'var(--wb-shadow)' }
+                  : { borderColor: 'var(--wb-line)', background: 'var(--wb-surface-2)' }
+              }
             >
               {/* 列头 */}
-              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2.5 dark:border-slate-700">
+              <div
+                className="flex items-center justify-between border-b px-3 py-2.5"
+                style={{ borderColor: 'var(--wb-line)' }}
+              >
                 <div className="flex items-center gap-2">
                   <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <span className="text-sm font-medium" style={{ color: 'var(--wb-ink)' }}>
                     {meta.label}
                   </span>
                 </div>
-                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium tabular-nums text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                <span
+                  className="rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
+                  style={{ background: 'var(--wb-surface)', color: 'var(--wb-ink-2)' }}
+                >
                   {list.length}
                 </span>
               </div>
@@ -195,7 +203,10 @@ export function RequirementKanban({
                 style={{ minHeight: 200, maxHeight: 'calc(100vh - 320px)' }}
               >
                 {list.length === 0 ? (
-                  <div className="flex items-center justify-center rounded-lg border border-dashed border-slate-200 py-6 text-xs text-slate-400 dark:border-slate-700">
+                  <div
+                    className="flex items-center justify-center rounded-lg border border-dashed py-6 text-xs"
+                    style={{ borderColor: 'var(--wb-line-2)', color: 'var(--wb-ink-3)' }}
+                  >
                     拖到此处
                   </div>
                 ) : (
@@ -238,31 +249,38 @@ function KanbanCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group cursor-pointer select-none rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-indigo-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-500 ${
+      className={`wb-card group cursor-pointer select-none rounded-lg p-3 transition hover:border-[var(--wb-brand-400)] hover:shadow-md ${
         dragging ? 'opacity-30' : ''
       }`}
       title="点击编辑 · 拖拽改状态"
     >
-      <div className="line-clamp-2 text-sm font-medium leading-snug text-slate-800 dark:text-slate-100">
+      <div className="line-clamp-2 text-sm font-medium leading-snug" style={{ color: 'var(--wb-ink)' }}>
         {r.name}
       </div>
       {requirementProjectDisplay(r) && (
         <div
-          className="mt-1.5 truncate text-[11px] text-slate-500 dark:text-slate-400"
+          className="mt-1.5 truncate text-[11px]"
+          style={{ color: 'var(--wb-ink-2)' }}
           title={requirementProjectDisplay(r)}
         >
           {requirementProjectDisplay(r)}
         </div>
       )}
       {r.branch && (
-        <code className="mt-1 inline-block max-w-full truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+        <code
+          className="mt-1 inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[10px]"
+          style={{ background: 'var(--wb-surface-2)', color: 'var(--wb-ink-2)' }}
+        >
           {r.branch}
         </code>
       )}
-      <div className="mt-2 flex items-center justify-between gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+      <div className="mt-2 flex items-center justify-between gap-1.5 text-[10px]" style={{ color: 'var(--wb-ink-3)' }}>
         <span>{recentTimeText(r)}</span>
         {r.status === 'ready' && r.publishTime && (
-          <span className="rounded bg-purple-100 px-1.5 py-0.5 font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
+          <span
+            className="rounded px-1.5 py-0.5 font-medium"
+            style={{ background: 'var(--wb-success-soft)', color: 'var(--wb-success)' }}
+          >
             今日上线
           </span>
         )}

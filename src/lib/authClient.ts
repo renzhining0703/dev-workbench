@@ -46,13 +46,18 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return json.data as T
 }
 
+export interface AuthUser {
+  username: string
+  nickname: string
+}
+
 export interface AuthData {
-  user: { username: string }
+  user: AuthUser
   token: string
 }
 
 export const authApi = {
-  async register(args: { username: string; password: string; inviteCode?: string }): Promise<AuthData> {
+  async register(args: { username: string; password: string; inviteCode?: string; nickname?: string }): Promise<AuthData> {
     return postJson<AuthData>('/auth/register', args)
   },
   async login(args: { username: string; password: string }): Promise<AuthData> {
@@ -71,8 +76,8 @@ export const authApi = {
       console.warn('[auth] logout failed:', json?.error ?? res.status)
     }
   },
-  /** 探测当前 token 是否还有效；返回 username 或 null */
-  async me(token: string): Promise<{ username: string } | null> {
+  /** 探测当前 token 是否还有效；返回 { username, nickname } 或 null */
+  async me(token: string): Promise<AuthUser | null> {
     const res = await fetch(`${SYNC_API}/auth/me`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
@@ -82,7 +87,23 @@ export const authApi = {
     if (!res.ok) return null
     const json = await readJson(res)
     if (!json.ok || !json.data) return null
-    return (json.data as { user: { username: string } }).user
+    return (json.data as { user: AuthUser }).user
+  },
+
+  /** 登录态修改昵称；返回更新后的 { username, nickname } */
+  async updateNickname(token: string, nickname: string): Promise<AuthUser> {
+    const res = await fetch(`${SYNC_API}/auth/nickname`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      credentials: 'omit',
+      body: JSON.stringify({ nickname }),
+    })
+    const json = await readJson(res)
+    if (!res.ok || !json.ok) {
+      if (res.status === 429) throw new AuthError('too many attempts', 429, true)
+      throw new AuthError(json.error ?? `http ${res.status}`, res.status)
+    }
+    return (json.data as { user: AuthUser }).user
   },
 
   /**

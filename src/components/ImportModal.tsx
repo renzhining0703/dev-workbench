@@ -45,13 +45,13 @@ export function ImportModal({
 
   return (
     <Modal open={open} onClose={onClose} title="导入需求数据" width="max-w-lg">
-      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+      <p className="mb-4 text-sm" style={{ color: 'var(--wb-ink-2)' }}>
         支持导入：旧版需求记录导出文件（自动转换字段）、本系统的 JSON 导出文件。
         按 id 去重合并，不会覆盖已有数据。
       </p>
 
       <div
-        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center transition hover:border-indigo-400 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-800/40 dark:hover:border-indigo-500 dark:hover:bg-indigo-500/10"
+        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--wb-line-2)] bg-[var(--wb-surface-2)] px-6 py-10 text-center transition hover:border-[var(--wb-brand-400)] hover:bg-[var(--wb-surface)]"
         onClick={() => fileRef.current?.click()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
@@ -60,13 +60,13 @@ export function ImportModal({
           if (f) handleFile(f)
         }}
       >
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="mb-3 text-slate-400">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="mb-3" style={{ color: 'var(--wb-ink-3)' }}>
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
         </svg>
-        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+        <p className="text-sm font-medium" style={{ color: 'var(--wb-ink)' }}>
           {fileName || '点击选择或拖拽 JSON 文件到此处'}
         </p>
-        <p className="mt-1 text-xs text-slate-400">推荐：需求记录_2026-08-14.json</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>推荐：需求记录_2026-08-14.json</p>
         <input
           ref={fileRef}
           type="file"
@@ -81,18 +81,24 @@ export function ImportModal({
       </div>
 
       {error && (
-        <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 dark:bg-rose-500/10 dark:text-rose-400">
+        <p
+          className="mt-3 rounded-lg px-3 py-2 text-sm"
+          style={{ background: 'var(--wb-danger-soft)', color: 'var(--wb-danger)' }}
+        >
           {error}
         </p>
       )}
       {result && (
-        <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+        <p
+          className="mt-3 rounded-lg px-3 py-2 text-sm"
+          style={{ background: 'var(--wb-success-soft)', color: 'var(--wb-success)' }}
+        >
           {result}
         </p>
       )}
 
       <div className="mt-6 flex justify-end gap-2">
-        <button className="btn-ghost" onClick={onClose}>关闭</button>
+        <button className="wb-btn-ghost" onClick={onClose}>关闭</button>
       </div>
     </Modal>
   )

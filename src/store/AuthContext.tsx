@@ -42,7 +42,9 @@ interface AuthContextValue {
   /** 从本地模式返回认证页（header「登录」按钮用） */
   showLogin: (mode?: Mode) => void
   login: (args: { username: string; password: string; remember: boolean }) => Promise<void>
-  register: (args: { username: string; password: string; inviteCode: string; remember: boolean }) => Promise<void>
+  register: (args: { username: string; nickname: string; password: string; inviteCode: string; remember: boolean }) => Promise<void>
+  /** 登录态修改昵称（成功后同步本地 session 与持久化） */
+  updateNickname: (nickname: string) => Promise<void>
   /** 忘记密码重置；成功后由认证页切回登录视图 */
   resetPassword: (args: { username: string; inviteCode: string; newPassword: string }) => Promise<void>
   /** 登录态修改密码（成功后当前会话保持有效） */
@@ -128,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(GUEST_KEY)
         setGuest(false)
         setSession(full)
-        notify({ tone: 'ok', text: `欢迎回来，${full.user.username}` })
+        notify({ tone: 'ok', text: `欢迎回来，${full.user.nickname}` })
       } catch (e) {
         if (e instanceof AuthError) {
           notify({ tone: 'error', text: e.message === 'invalid credentials' ? '用户名或密码错误' : e.message })
@@ -142,10 +144,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const register = useCallback(
-    async (args: { username: string; password: string; inviteCode: string; remember: boolean }) => {
+    async (args: { username: string; nickname: string; password: string; inviteCode: string; remember: boolean }) => {
       try {
         const data = await authApi.register({
           username: args.username.trim(),
+          nickname: args.nickname.trim() || undefined,
           password: args.password,
           inviteCode: args.inviteCode || undefined,
         })
@@ -153,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(GUEST_KEY)
         setGuest(false)
         setSession(full)
-        notify({ tone: 'ok', text: `账号 ${full.user.username} 已创建` })
+        notify({ tone: 'ok', text: `账号 ${full.user.nickname} 已创建` })
       } catch (e) {
         if (e instanceof AuthError) {
           notify({ tone: 'error', text: e.message === 'invalid credentials' ? '注册失败：邀请码错误或用户名已被占用' : e.message })
@@ -187,6 +190,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [session, notify],
   )
 
+  const updateNickname = useCallback(
+    async (nickname: string) => {
+      if (!session) throw new AuthError('not logged in', 401)
+      const user = await authApi.updateNickname(session.token, nickname.trim())
+      const next: AuthSession = { ...session, user }
+      setSession(next)
+      saveAuth(next, session.expiresAt > 0)
+      notify({ tone: 'ok', text: '昵称已更新' })
+    },
+    [session, notify],
+  )
+
   const logout = useCallback(async () => {
     const current = session
     setSession(null)
@@ -216,11 +231,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       resetPassword,
       changePassword,
+      updateNickname,
       logout,
       notify,
       onNotify,
     }),
-    [session, bootDone, guest, loginMode, prefillUsername, enterLocalMode, showLogin, login, register, resetPassword, changePassword, logout, notify, onNotify],
+    [session, bootDone, guest, loginMode, prefillUsername, enterLocalMode, showLogin, login, register, resetPassword, changePassword, updateNickname, logout, notify, onNotify],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -114,11 +114,44 @@ function stripVolatile(data) {
     check('register → 200', r.status === 200, `got ${r.status} ${r.text}`)
     check('register → token', typeof r.json?.data?.token === 'string' && r.json.data.token.length > 0)
     check('register → user.username', r.json?.data?.user?.username === USERNAME)
+    check('register 未传昵称 → nickname 回退 username', r.json?.data?.user?.nickname === USERNAME)
     registerToken = r.json?.data?.token ?? ''
   }
   {
     const r = await req('POST', '/api/auth/register', { body: { username: USERNAME, password: PASSWORD, inviteCode: INVITE_CODE } })
     check('register 重复用户名 → 401 invalid credentials', r.status === 401 && r.json?.error === 'invalid credentials')
+  }
+
+  /* ---------- 4b. 昵称：注册携带 + 修改 + 非法输入 ---------- */
+  {
+    const r = await req('POST', '/api/auth/register', {
+      body: { username: `${USERNAME}_n`, password: PASSWORD, inviteCode: INVITE_CODE, nickname: '测试昵称' },
+    })
+    check('register 带昵称 → nickname 生效', r.status === 200 && r.json?.data?.user?.nickname === '测试昵称', r.text)
+  }
+  {
+    const r = await req('POST', '/api/auth/nickname', {
+      token: registerToken,
+      body: { nickname: '新昵称' },
+    })
+    check('nickname 修改 → 200', r.status === 200, `got ${r.status} ${r.text}`)
+    check('nickname 修改 → 返回新昵称', r.json?.data?.user?.nickname === '新昵称')
+  }
+  {
+    const r = await req('GET', '/api/auth/me', { token: registerToken })
+    check('me 修改后 → nickname 已更新', r.json?.data?.user?.nickname === '新昵称')
+  }
+  {
+    const r = await req('POST', '/api/auth/nickname', { token: registerToken, body: { nickname: '' } })
+    check('nickname 空串 → 400 invalid input', r.status === 400 && r.json?.error === 'invalid input')
+  }
+  {
+    const r = await req('POST', '/api/auth/nickname', { token: registerToken, body: { nickname: 'x'.repeat(31) } })
+    check('nickname 超 30 字符 → 400 invalid input', r.status === 400 && r.json?.error === 'invalid input')
+  }
+  {
+    const r = await req('POST', '/api/auth/nickname', { token: 'deadbeef'.repeat(4), body: { nickname: 'x' } })
+    check('nickname 坏 token → 401', r.status === 401)
   }
 
   /* ---------- 5. me（register token 可用） ---------- */

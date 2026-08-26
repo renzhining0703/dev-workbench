@@ -14,9 +14,10 @@ import { authApi, AuthError } from '../lib/authClient'
  * - ≤920px 隐藏品牌面板，单列表单；暗色主题由 .dark 变量覆盖
  */
 type View = 'login' | 'register' | 'forgot'
-type FieldKey = 'username' | 'password' | 'invite'
+type FieldKey = 'username' | 'password' | 'invite' | 'nickname'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
+const NICKNAME_MAX = 30
 
 function friendlyError(e: unknown, fallback: string): string {
   if (e instanceof AuthError) {
@@ -100,6 +101,7 @@ export function AuthPage() {
   const auth = useAuth()
   const [view, setView] = useState<View>(auth.loginMode === 'forgot' ? 'forgot' : auth.loginMode)
   const [username, setUsername] = useState(auth.prefillUsername)
+  const [nickname, setNickname] = useState('')
   const [password, setPassword] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [remember, setRemember] = useState(true)
@@ -161,12 +163,14 @@ export function AuthPage() {
   /* ---- 校验 ---- */
   const validUsername = USERNAME_RE.test(username.trim())
   const validPassword = password.length >= 8
+  /** 昵称可选：留空则服务端回退用户名；填写则 ≤ 30 字符 */
+  const validNickname = nickname.trim().length <= NICKNAME_MAX
   const showInvite = view === 'forgot' || (view === 'register' && (inviteRequired || configFailed))
   /** 忘记密码必填邀请码；注册时仅服务端明确要求（inviteRequired）才必填，configFailed 时可留空 */
   const inviteMissing =
     (view === 'forgot' && inviteCode.trim().length === 0) ||
     (view === 'register' && inviteRequired && inviteCode.trim().length === 0)
-  const canSubmit = validUsername && validPassword && !inviteMissing && !busy
+  const canSubmit = validUsername && validPassword && validNickname && !inviteMissing && !busy
 
   function clearFieldError(key: FieldKey) {
     setFieldErrors((prev) => {
@@ -190,6 +194,7 @@ export function AuthPage() {
       const errs: Partial<Record<FieldKey, true>> = {}
       if (!validUsername) errs.username = true
       if (!validPassword) errs.password = true
+      if (!validNickname) errs.nickname = true
       if (inviteMissing) errs.invite = true
       setFieldErrors(errs)
       return
@@ -203,6 +208,7 @@ export function AuthPage() {
       } else if (view === 'register') {
         await auth.register({
           username: username.trim(),
+          nickname: nickname.trim(),
           password,
           inviteCode: inviteCode.trim(),
           remember,
@@ -334,6 +340,30 @@ export function AuthPage() {
                   用户名需为 3-20 位小写字母、数字或下划线
                 </p>
               </div>
+
+              {view === 'register' && (
+                <div className="auth-field">
+                  <label htmlFor="auth-nickname">昵称（可选）</label>
+                  <div className="auth-control">
+                    <input
+                      id="auth-nickname"
+                      className="auth-input"
+                      placeholder={`≤ ${NICKNAME_MAX} 字符，默认与用户名相同`}
+                      value={nickname}
+                      maxLength={NICKNAME_MAX}
+                      spellCheck={false}
+                      aria-invalid={fieldErrors.nickname || undefined}
+                      onChange={(e) => {
+                        setNickname(e.target.value)
+                        clearFieldError('nickname')
+                      }}
+                    />
+                  </div>
+                  <p className={`auth-error${fieldErrors.nickname ? ' show' : ''}`} id="auth-nickname-err">
+                    昵称最多 {NICKNAME_MAX} 字符
+                  </p>
+                </div>
+              )}
 
               <div className="auth-field">
                 <label htmlFor="auth-password">{view === 'forgot' ? '新密码' : '密码'}</label>

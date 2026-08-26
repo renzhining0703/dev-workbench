@@ -12,7 +12,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS users (
@@ -37,6 +37,16 @@ CREATE TABLE IF NOT EXISTS snapshots (
 `
 
 /**
+ * v2：users 增加昵称列。
+ * - 旧用户回填 nickname = username（与注册默认行为一致，保证列非空）
+ * - ALTER TABLE ADD COLUMN 不支持 IF NOT EXISTS，必须由 migrate() 按版本号门控执行
+ */
+const SCHEMA_V2 = `
+ALTER TABLE users ADD COLUMN nickname TEXT;
+UPDATE users SET nickname = username WHERE nickname IS NULL;
+`
+
+/**
  * 打开（或创建）数据库并应用 schema。
  * @param {string} file 数据库文件路径
  * @returns {import('node:sqlite').DatabaseSync}
@@ -53,9 +63,11 @@ export function openDatabase(file) {
 function migrate(db) {
   const current = db.prepare('PRAGMA user_version').get().user_version
   if (current >= SCHEMA_VERSION) return
-  if (current !== 0) {
+  if (current > SCHEMA_VERSION) {
     throw new Error(`数据库 schema 版本 ${current} 比本程序支持的更高，请升级程序`)
   }
-  db.exec(SCHEMA_V1)
+  // 顺序升级：current=0 → v1；current=1 → v2；跳过已应用的版本
+  if (current < 1) db.exec(SCHEMA_V1)
+  if (current < 2) db.exec(SCHEMA_V2)
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
 }
