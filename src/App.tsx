@@ -9,6 +9,7 @@ import { RequirementKanban } from './components/RequirementKanban'
 import { ProjectManagerModal } from './components/ProjectManagerModal'
 import { PublishReminder, TodoPanel } from './components/TodoPanel'
 import { TodoView } from './components/TodoView'
+import { TodayHero } from './components/TodayHero'
 import { TodoSummaryReminder } from './components/TodoSummaryReminder'
 import { ExportModal } from './components/ExportModal'
 import { ImportModal } from './components/ImportModal'
@@ -647,6 +648,11 @@ function AppInner({
         )}
         {tab === 'today' ? (
           <div className="wb-view active">
+            <TodayHero
+              nickname={auth.session?.user.nickname ?? '朋友'}
+              todos={store.todos}
+              requirements={store.requirements}
+            />
             <PublishReminder requirements={store.requirements} />
             <TodoPanel
               todos={store.todos}

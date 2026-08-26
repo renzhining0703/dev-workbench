@@ -1060,19 +1060,29 @@ html.dark .wb-pill.active { background: var(--wb-brand-500); }
     radial-gradient(600px 300px at 88% -20%, rgba(42,112,86,.5), transparent 60%),
     radial-gradient(500px 300px at -5% 120%, rgba(192,138,45,.22), transparent 55%);
 }
-.wb-hero-inner { position: relative; z-index: 1; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.wb-hero-inner { position: relative; z-index: 1; display: flex; align-items: center; gap: 24px; }
+.wb-hero-main { flex: 1; min-width: 0; }
 .wb-hero h2 { font-family: var(--wb-serif); font-size: 24px; font-weight: 500; line-height: 1.25; }
 .wb-hero h2 em { font-style: italic; color: #E8C87E; }
 .wb-hero p { font-size: 12.5px; color: rgba(237,241,234,.66); margin-top: 6px; }
 .wb-hero-date { font-size: 11px; letter-spacing: .1em; color: rgba(237,241,234,.5); text-transform: uppercase; }
-.wb-hero-stats { display: flex; gap: 28px; margin-left: auto; }
+.wb-hero-stats { display: flex; gap: 28px; margin-left: auto; flex-shrink: 0; }
 .wb-hero-stat { text-align: right; }
 .wb-hero-stat strong { display: block; font-family: var(--wb-serif); font-size: 26px; font-weight: 500; color: #F3E7CF; font-variant-numeric: tabular-nums; }
 .wb-hero-stat span { font-size: 11px; color: rgba(237,241,234,.55); }
 .wb-hero-progress { width: 100%; margin-top: 18px; position: relative; z-index: 1; }
 .wb-hero-progress .bar { height: 4px; border-radius: 99px; background: rgba(237,241,234,.14); overflow: hidden; }
-.wb-hero-progress .bar i { display: block; height: 100%; width: 64%; border-radius: 99px; background: linear-gradient(90deg, var(--wb-accent), #E8C87E); }
+.wb-hero-progress .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--wb-accent), #E8C87E); }
 .wb-hero-progress .meta { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11px; color: rgba(237,241,234,.6); }
+@media (max-width: 640px) {
+  .wb-hero { padding: 20px; border-radius: 16px; }
+  .wb-hero-inner { flex-wrap: wrap; gap: 18px; }
+  .wb-hero h2 { font-size: 20px; }
+  .wb-hero-stats { margin-left: 0; width: 100%; justify-content: space-between; gap: 0; }
+  .wb-hero-stat { text-align: center; flex: 1; }
+  .wb-hero-stat strong { font-size: 22px; }
+  .wb-hero-progress { margin-top: 14px; }
+}
 
 /* 任务卡片（今日开始开发/开发中/上线） */
 .wb-task-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
