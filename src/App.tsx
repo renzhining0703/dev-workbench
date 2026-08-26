@@ -438,7 +438,7 @@ function AppInner({
             </div>
           </div>
 
-          <nav className="wb-nav">
+          <nav className="wb-nav wb-nav-desktop">
             {(
               [
                 ['today', '今日概览'],

@@ -93,8 +93,7 @@ export function TodoRow({
       {editing ? (
         <input
           ref={inputRef}
-          className="wb-input"
-          style={{ flex: 1, height: 30, padding: '4px 10px' }}
+          className="wb-input wb-todo-edit"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -108,31 +107,33 @@ export function TodoRow({
         <>
           {/* 优先级圆点（设计稿风格） */}
           <span className={`pri ${prio === 'high' ? 'pri-high' : prio === 'normal' ? 'pri-normal' : 'pri-low'}`} />
-          <span
-            className="content"
-            style={muted ? { color: 'var(--wb-ink-3)' } : undefined}
-            onDoubleClick={startEdit}
-            title={todo.content}
-          >
-            {todo.content}
-            {todo.done && doneTime && (
-              <span style={{ fontSize: 11, color: 'var(--wb-ink-3)', marginLeft: 8 }}>
-                {doneTime} 完成
-              </span>
-            )}
-          </span>
-        </>
-      )}
+          <div className="wb-todo-main">
+            <span
+              className="content"
+              style={muted ? { color: 'var(--wb-ink-3)' } : undefined}
+              onDoubleClick={startEdit}
+              title={todo.content}
+            >
+              {todo.content}
+              {todo.done && doneTime && (
+                <span style={{ fontSize: 11, color: 'var(--wb-ink-3)', marginLeft: 8 }}>
+                  {doneTime} 完成
+                </span>
+              )}
+            </span>
 
-      {/* 关联需求 chip（点击跳回需求抽屉） */}
-      {!editing && reqName && todo.requirementId && (
-        <button
-          onClick={() => onOpenRequirement?.(todo.requirementId!)}
-          className="req-chip"
-          title={`打开需求「${reqName}」`}
-        >
-          🔗 {reqName}
-        </button>
+            {/* 关联需求 chip（点击跳回需求抽屉） */}
+            {reqName && todo.requirementId && (
+              <button
+                onClick={() => onOpenRequirement?.(todo.requirementId!)}
+                className="req-chip"
+                title={`打开需求「${reqName}」`}
+              >
+                🔗 {reqName}
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {/* 优先级三态循环：高 / 普通 / 低，点击切换 */}

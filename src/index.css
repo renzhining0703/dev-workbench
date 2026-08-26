@@ -817,6 +817,11 @@ html.dark .wb-nav-btn.active { background: var(--wb-brand-700); color: #EDF1EA; 
 }
 
 .wb-header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+@media (max-width: 640px) {
+  .wb-nav-desktop { display: none !important; }
+  .wb-header-inner { padding: 10px 14px; }
+  .wb-logo-date { display: none; }
+}
 .wb-btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   background: var(--wb-accent); color: #1A1408;
@@ -1107,8 +1112,21 @@ html.dark .wb-pill.active { background: var(--wb-brand-500); }
 .wb-reminder .ic svg { width: 15px; height: 15px; }
 .wb-reminder b { font-size: 13px; font-weight: 600; }
 .wb-reminder p { font-size: 12.5px; margin-top: 2px; }
-.wb-reminder .tags { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+.wb-reminder .tags { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; list-style: none; padding: 0; }
+.wb-reminder .tags li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wb-reminder .tags li .name { font-size: 12.5px; }
 .wb-reminder .tag { background: rgba(179,64,46,.1); border-radius: 6px; padding: 1px 7px; font-size: 11px; }
+.wb-reminder .tag.branch { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (max-width: 640px) {
+  .wb-reminder { padding: 10px 12px; gap: 10px; }
+  .wb-reminder .ic { width: 26px; height: 26px; }
+  .wb-reminder .ic svg { width: 13px; height: 13px; }
+  .wb-reminder b { font-size: 12px; }
+  .wb-reminder .tags { gap: 4px; margin-top: 4px; }
+  .wb-reminder .tags li { gap: 4px; }
+  .wb-reminder .tags li .name { font-size: 12px; }
+  .wb-reminder .tag { font-size: 10px; padding: 1px 5px; }
+}
 
 /* 待办 */
 .wb-todo-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
@@ -1134,6 +1152,7 @@ html.dark .num-accent { color: var(--wb-accent); }
 .wb-date-label .cal { font-size: 13px; opacity: .5; }
 .wb-date-progress { margin-left: auto; font-size: 12px; color: var(--wb-ink-3); font-variant-numeric: tabular-nums; }
 .wb-add-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.wb-add-row button { flex-shrink: 0; white-space: nowrap; min-width: 48px; }
 .wb-todo-list { list-style: none; }
 .wb-todo-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; transition: background .15s; }
 .wb-todo-row:hover { background: var(--wb-surface-2); }
@@ -1147,14 +1166,20 @@ html.dark .num-accent { color: var(--wb-accent); }
 .wb-check svg { width: 11px; height: 11px; stroke-width: 3; }
 .wb-todo-row.done .wb-check { background: var(--wb-brand-600); border-color: var(--wb-brand-600); color: #fff; }
 .wb-todo-row.done .content { color: var(--wb-ink-3); text-decoration: line-through; }
-.wb-todo-row .content { flex: 1; font-size: 13px; color: var(--wb-ink); min-width: 0; }
+.wb-todo-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.wb-todo-row .content { flex: 1; font-size: 13px; color: var(--wb-ink); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wb-todo-row .req-chip {
   flex-shrink: 0; font-size: 11px; color: var(--wb-brand-500);
   background: rgba(42,112,86,.09); border-radius: 6px; padding: 2px 7px;
   max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   cursor: pointer;
 }
+.wb-todo-edit { flex: 1; height: 30px; padding: 4px 10px; }
 .wb-todo-row .pri { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+@media (max-width: 640px) {
+  .wb-todo-main { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .wb-todo-row .req-chip { max-width: 160px; }
+}
 .pri-high { background: var(--wb-danger); }
 .pri-normal { background: var(--wb-accent); }
 .pri-low { background: var(--wb-ink-3); }

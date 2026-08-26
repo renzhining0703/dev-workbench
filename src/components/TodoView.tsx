@@ -258,7 +258,7 @@ export function TodoView({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
           />
-          <button className="wb-btn-soft" onClick={submit}>添加</button>
+          <button className="wb-btn-soft shrink-0 whitespace-nowrap min-w-[48px]" onClick={submit}>添加</button>
         </div>
 
         {dayTodos.length === 0 ? (

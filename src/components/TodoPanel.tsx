@@ -68,10 +68,10 @@ export function PublishReminder({ requirements }: { requirements: Requirement[] 
         <b>今日上线提醒 · {dueList.length} 条需求今日上线</b>
         <ul className="tags">
           {dueList.map((r) => (
-            <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              「{r.name}」
+            <li key={r.id}>
+              <span className="name">「{r.name}」</span>
               {r.branch && (
-                <span className="tag" style={{ fontFamily: 'ui-monospace, monospace' }}>{r.branch}</span>
+                <span className="tag branch">{r.branch}</span>
               )}
               {requirementModuleDisplay(r) && (
                 <span className="tag">模块 {requirementModuleDisplay(r)}</span>
@@ -217,7 +217,7 @@ export function TodoPanel({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && submit()}
             />
-            <button className="wb-btn-soft" onClick={submit}>添加</button>
+            <button className="wb-btn-soft shrink-0 whitespace-nowrap min-w-[48px]" onClick={submit}>添加</button>
           </div>
 
           {/* 昨日遗留 */}
