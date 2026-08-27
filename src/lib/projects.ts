@@ -129,3 +129,36 @@ export function requirementModuleDisplay(r: {
   }
   return r.publishModule ? r.publishModule : ''
 }
+
+/**
+ * 每个项目一条独立的「项目 + 发布模块」结构（按需求的多项目数组逐项展开）。
+ * 用于：列表里每个项目单独成行、点击单行复制对应模块、溢出 popover 展示完整列表。
+ * - 空模块 → 兜底显示 '全量'（与 requirementModuleDisplay 保持一致语义）
+ * - 单项目且无发布模块 → 返回 [{ project, module: '' }]，由调用方决定是否降级展示
+ * - 项目数组为空 → 返回 []（兼容旧结构：用兜底 project/publishModule 文本）
+ */
+export function requirementProjectModules(r: {
+  project?: string
+  publishModule?: string
+  projects?: RequirementProject[]
+}): { project: string; module: string }[] {
+  if (r.projects && r.projects.length > 0) {
+    return r.projects.map((p) => ({
+      project: p.project,
+      module: p.publishModule || '',
+    }))
+  }
+  // 兜底：旧结构 / 未规范化数据；从 project 文本中拆出项目名、首个挂上 publishModule
+  const names = extractProjectNames(r.project)
+  if (names.length === 0) return []
+  const fallbackModule = (r.publishModule ?? '').trim()
+  return names.map((name, i) => ({
+    project: name,
+    module: i === 0 ? fallbackModule : '',
+  }))
+}
+
+/** 给定项目名 + 模块，按与 requirementModuleDisplay 一致的口径返回单行的展示文本 */
+export function formatProjectModuleLine(project: string, module: string): string {
+  return module ? `${project}: ${module}` : `${project}: 全量`
+}

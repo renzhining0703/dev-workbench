@@ -7,7 +7,9 @@ import { highlight } from '../lib/highlight'
 import {
   requirementModuleDisplay,
   requirementProjectDisplay,
+  requirementProjectModules,
   requirementProjectNames,
+  formatProjectModuleLine,
 } from '../lib/projects'
 import { useStore } from '../store/StoreContext'
 import { ConfirmDialog, EmptyState, SkeletonRows } from './ui'
@@ -20,6 +22,32 @@ type StatusFilter = 'all' | RequirementStatus
 const HIGH_FREQ_STATUSES: RequirementStatus[] = ['pending', 'developing', 'testing', 'ready']
 /** 移动端低频状态：藏在"更多"下拉里；桌面端仍直接展示 */
 const LOW_FREQ_STATUSES: RequirementStatus[] = ['paused', 'published', 'archived']
+/** 项目数量超过此阈值时显示 "(等N个)" 后缀，点击弹层展示全部 */
+const PROJECT_OVERFLOW_THRESHOLD = 2
+
+/** 项目溢出 popover 的尺寸常量（与渲染面板保持一致） */
+const OVERFLOW_PANEL_W = 320
+const OVERFLOW_PANEL_EST_H = 280
+const OVERFLOW_PADDING = 8
+
+/**
+ * 由触发按钮的视口位置算出 popover 落点：默认贴按钮下方，超出右/下方则翻转。
+ * 同时在 click 时同步算出初始坐标（避免 useEffect 跑完前闪到 0,0），并供 effect 复用。
+ */
+function computeOverflowPos(btn: DOMRect): { top: number; left: number } {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  let left = btn.left
+  if (left + OVERFLOW_PANEL_W > vw - OVERFLOW_PADDING) {
+    left = Math.max(OVERFLOW_PADDING, vw - OVERFLOW_PANEL_W - OVERFLOW_PADDING)
+  }
+  const spaceBelow = vh - btn.bottom - OVERFLOW_PADDING
+  const top =
+    spaceBelow >= OVERFLOW_PANEL_EST_H
+      ? btn.bottom + 4
+      : Math.max(OVERFLOW_PADDING, btn.top - OVERFLOW_PANEL_EST_H - 4)
+  return { top, left }
+}
 
 /** 排序方向 */
 type SortDir = 'asc' | 'desc'
@@ -153,6 +181,14 @@ export function RequirementTable({
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [copiedBranch, setCopiedBranch] = useState<string | null>(null)
   const [copiedModule, setCopiedModule] = useState<string | null>(null)
+  /** 项目溢出 popover：超过阈值（见 PROJECT_OVERFLOW_THRESHOLD）时点击展示全部 */
+  const [overflow, setOverflow] = useState<{
+    r: Requirement
+    /** 触发按钮的位置，用于 popover 锚定（视口坐标） */
+    anchorTop: number
+    anchorLeft: number
+  } | null>(null)
+  const overflowAnchorRef = useRef<HTMLButtonElement | null>(null)
   const [sortField, setSortField] = useState<SortField>(() => {
     const v = readUrlParam('sort', 'createdAt')
     return VALID_SORT_FIELDS.includes(v as SortField) ? (v as SortField) : 'createdAt'
@@ -194,6 +230,16 @@ export function RequirementTable({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectMode, exitSelectMode])
+
+  // Esc 关闭项目溢出 popover
+  useEffect(() => {
+    if (!overflow) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOverflow(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [overflow])
 
   // 首屏骨架屏：短暂显示骨架行，提升加载感知
   useEffect(() => {
@@ -248,6 +294,24 @@ export function RequirementTable({
       window.removeEventListener('scroll', updatePos, true)
     }
   }, [moreOpen])
+
+  // 项目溢出 popover 定位：与「更多」下拉同套定位策略（Portal + resize/scroll 同步）
+  useEffect(() => {
+    if (!overflow) return
+    const updatePos = () => {
+      const btn = overflowAnchorRef.current
+      if (!btn) return
+      const { top, left } = computeOverflowPos(btn.getBoundingClientRect())
+      setOverflow((prev) => (prev ? { ...prev, anchorTop: top, anchorLeft: left } : prev))
+    }
+    updatePos()
+    window.addEventListener('resize', updatePos)
+    window.addEventListener('scroll', updatePos, true)
+    return () => {
+      window.removeEventListener('resize', updatePos)
+      window.removeEventListener('scroll', updatePos, true)
+    }
+  }, [overflow])
 
   /** 点击复制到剪贴板，成功短暂显示「已复制」；新复制会先还原上一次的状态 */
   function copyWithFeedback(text: string, setCopied: (v: string | null) => void) {
@@ -574,7 +638,7 @@ export function RequirementTable({
         </div>
 
         {/* 搜索 */}
-        <div className="wb-search" style={{ marginLeft: 'auto', width: '100%', maxWidth: 300 }}>
+        <div className="wb-search w-full md:ml-auto md:w-auto" style={{ maxWidth: 300 }}>
           <svg
             width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
           >
@@ -651,7 +715,7 @@ export function RequirementTable({
           <>
             {/* 桌面骨架行 */}
             <div className="hidden overflow-x-auto md:block">
-              <table className={`wb-table ${selectMode ? 'min-w-[1140px]' : 'min-w-[1100px]'}`}>
+              <table className={`wb-table ${selectMode ? 'min-w-[1200px]' : 'min-w-[1160px]'}`}>
                 <SkeletonRows rows={5} cols={selectMode ? 7 : 6} />
               </table>
             </div>
@@ -707,7 +771,7 @@ export function RequirementTable({
           <>
             {/* 桌面表格 */}
             <div className="hidden overflow-x-auto md:block">
-              <table className={`wb-table ${selectMode ? 'min-w-[1140px]' : 'min-w-[1100px]'}`}>
+              <table className={`wb-table ${selectMode ? 'min-w-[1200px]' : 'min-w-[1160px]'}`}>
                 <thead>
                   <tr>
                     {selectMode && (
@@ -730,8 +794,8 @@ export function RequirementTable({
                         <SortIcon active={sortField === 'name'} dir={sortDir} />
                       </span>
                     </th>
-                    <th className="min-w-[240px]">项目 / 分支</th>
-                    <th>发布模块</th>
+                    <th className="min-w-[300px]">项目 / 分支</th>
+                    <th className="min-w-[180px]">发布模块</th>
                     <th
                       className="cursor-pointer select-none"
                       onClick={() => toggleSort('status')}
@@ -780,45 +844,27 @@ export function RequirementTable({
                         )}
                         <TestDueBadge r={r} />
                       </td>
-                      <td className="min-w-[240px]">
-                        <div className="flex max-w-[240px] flex-wrap items-center gap-1">
-                          {requirementProjectNames(r).length > 0 ? (
-                            requirementProjectNames(r).map((name) => (
-                              <span
-                                key={name}
-                                className="wb-chip"
-                                style={{ background: 'var(--wb-surface-2)', color: 'var(--wb-ink-2)', maxWidth: 240 }}
-                                title={name}
-                              >
-                                {highlight(name, keyword)}
-                              </span>
-                            ))
-                          ) : (
-                            <span style={{ color: 'var(--wb-ink-3)' }}>—</span>
-                          )}
-                        </div>
-                        <code
-                          onClick={() => copyWithFeedback(r.branch, setCopiedBranch)}
-                          className="wb-code"
-                          style={copiedBranch === r.branch ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 } : undefined}
-                          title={r.branch ? '点击复制分支名' : undefined}
-                        >
-                          {copiedBranch === r.branch ? '✓ 已复制' : (r.branch ? highlight(r.branch, keyword) : '—')}
-                        </code>
+                      <td className="min-w-[300px]">
+                        <ProjectBranchCell
+                          r={r}
+                          keyword={keyword}
+                          copiedBranch={copiedBranch}
+                          onCopyBranch={(b) => copyWithFeedback(b, setCopiedBranch)}
+                          onOpenOverflow={(e) => {
+                            overflowAnchorRef.current = e.currentTarget
+                            // 同步算位置，避免 useEffect 跑完前闪到 (0,0)
+                            const { top, left } = computeOverflowPos(e.currentTarget.getBoundingClientRect())
+                            setOverflow({ r, anchorTop: top, anchorLeft: left })
+                          }}
+                        />
                       </td>
-                      <td>
-                        {requirementModuleDisplay(r) ? (
-                          <code
-                            onClick={() => copyWithFeedback(requirementModuleDisplay(r), setCopiedModule)}
-                            className="wb-code module"
-                            style={copiedModule === requirementModuleDisplay(r) ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 } : undefined}
-                            title="点击复制发布模块"
-                          >
-                            {copiedModule === requirementModuleDisplay(r) ? '✓ 已复制' : highlight(requirementModuleDisplay(r), keyword)}
-                          </code>
-                        ) : (
-                          <span style={{ color: 'var(--wb-ink-3)', opacity: 0.6 }}>—</span>
-                        )}
+                      <td className="min-w-[180px]">
+                        <ModuleLines
+                          r={r}
+                          keyword={keyword}
+                          copiedModule={copiedModule}
+                          onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
+                        />
                       </td>
                       <td>
                         <div className="flex items-center gap-2">
@@ -897,6 +943,12 @@ export function RequirementTable({
                   onToggleSelect={() => toggleSelect(r.id)}
                   onCopyBranch={(b) => copyWithFeedback(b, setCopiedBranch)}
                   onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
+                  onOpenOverflow={(e) => {
+                    overflowAnchorRef.current = e.currentTarget
+                    // 同步算位置，避免 useEffect 跑完前闪到 (0,0)
+                    const { top, left } = computeOverflowPos(e.currentTarget.getBoundingClientRect())
+                    setOverflow({ r, anchorTop: top, anchorLeft: left })
+                  }}
                   onOpen={() => setDrawerId(r.id)}
                   onEdit={() => onEdit(r)}
                   onClone={onClone ? () => onClone(r) : undefined}
@@ -945,6 +997,194 @@ export function RequirementTable({
         onEdit={(r) => { setDrawerId(null); onEdit(r) }}
         onStatusChange={onStatusChange}
       />
+
+      {/* 项目溢出 popover：项目数 > 阈值时点击 (等N个) 展示全部 */}
+      {overflow &&
+        createPortal(
+          <>
+            {/* 外部点击关闭层：z-40 */}
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setOverflow(null)}
+            />
+            {/* 面板：z-50，固定定位 */}
+            <div
+              className="fixed z-50 overflow-auto rounded-xl shadow-lg"
+              style={{
+                top: overflow.anchorTop,
+                left: overflow.anchorLeft,
+                width: OVERFLOW_PANEL_W,
+                maxHeight: 360,
+                background: 'var(--wb-surface)',
+                border: '1px solid var(--wb-line)',
+              }}
+            >
+              <div
+                className="px-3 py-2 text-xs font-semibold"
+                style={{
+                  color: 'var(--wb-ink-3)',
+                  borderBottom: '1px solid var(--wb-line)',
+                  background: 'var(--wb-surface-2)',
+                }}
+              >
+                全部项目（{requirementProjectNames(overflow.r).length}）
+              </div>
+              <div className="py-1">
+                {requirementProjectModules(overflow.r).map(({ project, module }) => (
+                  <div
+                    key={project}
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs"
+                    style={{ color: 'var(--wb-ink-2)' }}
+                  >
+                    <span
+                      className="min-w-0 flex-1 truncate"
+                      style={{ color: 'var(--wb-ink)' }}
+                      title={project}
+                    >
+                      {project}
+                    </span>
+                    <span
+                      className="wb-code module"
+                      style={{ maxWidth: 180 }}
+                      title={module || '全量发布'}
+                    >
+                      {module || '全量'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>,
+          document.body,
+        )}
+    </div>
+  )
+}
+
+/**
+ * 「项目 / 分支」单元格：两行布局
+ * - 第一行：「项目: aaa、bbb、ccc(等N个)」
+ *   项目数 > PROJECT_OVERFLOW_THRESHOLD 时显示 (等N个)，点击触发 onOpenOverflow 由父级渲染 popover
+ * - 第二行：「分支: <wb-code>xxx</wb-code>」
+ * 颜色沿用现有 wb-chip / wb-code 风格；项目名高亮复用 highlight()。
+ */
+function ProjectBranchCell({
+  r,
+  keyword,
+  copiedBranch,
+  onCopyBranch,
+  onOpenOverflow,
+}: {
+  r: Requirement
+  keyword: string
+  copiedBranch: string | null
+  onCopyBranch: (b: string) => void
+  onOpenOverflow: (e: React.MouseEvent<HTMLButtonElement>) => void
+}) {
+  const names = requirementProjectNames(r)
+  const overflow = names.length > PROJECT_OVERFLOW_THRESHOLD
+  const shown = overflow ? names.slice(0, PROJECT_OVERFLOW_THRESHOLD) : names
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="wb-pb-line" title={names.length > 0 ? names.join('、') : undefined}>
+        <span className="wb-pb-label">项目:</span>
+        {names.length > 0 ? (
+          <>
+            <span className="wb-pb-value">
+              {shown.map((n, i) => (
+                <span key={n}>
+                  {i > 0 && <span style={{ opacity: 0.5 }}>、</span>}
+                  {highlight(n, keyword)}
+                </span>
+              ))}
+            </span>
+            {overflow && (
+              <button
+                type="button"
+                className="wb-pb-overflow"
+                onClick={onOpenOverflow}
+                title={`还有 ${names.length - shown.length} 个项目，点击查看全部`}
+              >
+                (等{names.length}个)
+              </button>
+            )}
+          </>
+        ) : (
+          <span style={{ color: 'var(--wb-ink-3)' }}>—</span>
+        )}
+      </div>
+      <div className="wb-pb-line">
+        <span className="wb-pb-label">分支:</span>
+        {r.branch ? (
+          <code
+            onClick={() => onCopyBranch(r.branch)}
+            className="wb-code"
+            style={
+              copiedBranch === r.branch
+                ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 }
+                : undefined
+            }
+            title="点击复制分支名"
+          >
+            {copiedBranch === r.branch ? '✓ 已复制' : highlight(r.branch, keyword)}
+          </code>
+        ) : (
+          <span style={{ color: 'var(--wb-ink-3)' }}>—</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 「发布模块」单元格：每个项目一行「project: module」（空 module → 全量）。
+ * 点击单行复制整行文本（"project: module"），保留 wb-code.module 颜色。
+ */
+function ModuleLines({
+  r,
+  keyword,
+  copiedModule,
+  onCopyModule,
+}: {
+  r: Requirement
+  keyword: string
+  copiedModule: string | null
+  onCopyModule: (line: string) => void
+}) {
+  const items = requirementProjectModules(r)
+  if (items.length === 0) {
+    return <span style={{ color: 'var(--wb-ink-3)', opacity: 0.6 }}>—</span>
+  }
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {items.map(({ project, module }) => {
+        const lineLabel = formatProjectModuleLine(project, module)
+        const isCopied = copiedModule === lineLabel
+        return (
+          <code
+            key={project}
+            onClick={() => onCopyModule(lineLabel)}
+            className="wb-code module"
+            style={
+              isCopied
+                ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 }
+                : undefined
+            }
+            title={`${lineLabel}（点击复制）`}
+          >
+            {isCopied ? (
+              '✓ 已复制'
+            ) : (
+              <>
+                {highlight(project, keyword)}:{' '}
+                <span style={{ opacity: module ? 1 : 0.75 }}>
+                  {highlight(module || '全量', keyword)}
+                </span>
+              </>
+            )}
+          </code>
+        )
+      })}
     </div>
   )
 }
@@ -979,6 +1219,7 @@ function RequirementCard({
   onToggleSelect,
   onCopyBranch,
   onCopyModule,
+  onOpenOverflow,
   onOpen,
   onEdit,
   onClone,
@@ -994,6 +1235,7 @@ function RequirementCard({
   onToggleSelect: () => void
   onCopyBranch: (b: string) => void
   onCopyModule: (m: string) => void
+  onOpenOverflow: (e: React.MouseEvent<HTMLButtonElement>) => void
   onOpen: () => void
   onEdit: () => void
   onClone?: () => void
@@ -1083,36 +1325,21 @@ function RequirementCard({
       )}
       <TestDueBadge r={r} />
 
-      {/* 项目 / 分支 / 模块 */}
-      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        {requirementProjectDisplay(r) && (
-          <span
-            className="min-w-0 max-w-full truncate"
-            style={{ color: 'var(--wb-ink-2)' }}
-          >
-            {highlight(requirementProjectDisplay(r), keyword)}
-          </span>
-        )}
-        {r.branch && (
-          <code
-            onClick={() => onCopyBranch(r.branch)}
-            className="wb-code"
-            style={copiedBranch === r.branch ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 } : undefined}
-            title="点击复制分支名"
-          >
-            {copiedBranch === r.branch ? '✓ 已复制' : highlight(r.branch, keyword)}
-          </code>
-        )}
-        {requirementModuleDisplay(r) && (
-          <code
-            onClick={() => onCopyModule(requirementModuleDisplay(r))}
-            className="wb-code module"
-            style={copiedModule === requirementModuleDisplay(r) ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 } : undefined}
-            title="点击复制发布模块"
-          >
-            {copiedModule === requirementModuleDisplay(r) ? '✓ 已复制' : highlight(requirementModuleDisplay(r), keyword)}
-          </code>
-        )}
+      {/* 项目 / 分支 / 模块：与桌面表格一致的两行 + 多行模块布局 */}
+      <div className="flex flex-col gap-1.5 text-xs">
+        <ProjectBranchCell
+          r={r}
+          keyword={keyword}
+          copiedBranch={copiedBranch}
+          onCopyBranch={onCopyBranch}
+          onOpenOverflow={onOpenOverflow}
+        />
+        <ModuleLines
+          r={r}
+          keyword={keyword}
+          copiedModule={copiedModule}
+          onCopyModule={onCopyModule}
+        />
       </div>
 
       {/* 时间 */}
