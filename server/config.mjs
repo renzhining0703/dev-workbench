@@ -97,5 +97,11 @@ export function loadConfig(env = process.env) {
     allowedOrigins: parseList(
       envOrDefault(env, 'ALLOWED_ORIGINS', 'http://localhost:5173,http://211.159.169.153'),
     ),
+
+    // Web Push（VAPID 密钥走 data/env.local 注入，跨部署保留）
+    // 生成方式：cd server && npx web-push generate-vapid-keys
+    vapidPublicKey: (env.VAPID_PUBLIC_KEY ?? '').trim(),
+    vapidPrivateKey: (env.VAPID_PRIVATE_KEY ?? '').trim(),
+    vapidSubject: envOrDefault(env, 'VAPID_SUBJECT', 'mailto:dev@dev-workbench.local'),
   }
 }

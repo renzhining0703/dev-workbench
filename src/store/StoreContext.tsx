@@ -19,6 +19,7 @@ import {
   saveTodos,
   uid,
   nowISO,
+  StorageError,
   type BackupData,
 } from '../lib/storage'
 import { getArchiveMonths, setArchiveMonths as persistArchiveMonths } from '../lib/archive'
@@ -68,9 +69,9 @@ interface Store {
   ) => void
   removeTodo: (id: string) => void
   /** 项目库维护（名称去重），返回是否成功 */
-  addProject: (name: string, moduleBased?: boolean) => boolean
-  updateProject: (id: string, name: string, moduleBased?: boolean) => boolean
-  removeProject: (id: string) => void
+  addProject: (name: string, moduleBased?: boolean) => { ok: boolean; error?: string }
+  updateProject: (id: string, name: string, moduleBased?: boolean) => { ok: boolean; error?: string }
+  removeProject: (id: string) => { ok: boolean; error?: string }
   /** 首次启动写入种子项目，返回是否执行了写入 */
   initProjects: (seed: string[]) => boolean
   /** 从备份恢复全部数据（覆盖现有），返回是否成功 */
@@ -320,28 +321,35 @@ export function StoreProvider({
   const normalizeName = (name: string) => name.trim()
 
   const addProject = useCallback(
-    (name: string, moduleBased?: boolean): boolean => {
+    (name: string, moduleBased?: boolean): { ok: boolean; error?: string } => {
       const n = normalizeName(name)
-      if (!n) return false
-      if (projects.some((p) => p.name.toLowerCase() === n.toLowerCase())) return false
+      if (!n) return { ok: false, error: '项目名为空' }
+      if (projects.some((p) => p.name.toLowerCase() === n.toLowerCase())) return { ok: false, error: '项目已存在' }
       const t = nowISO()
       const next = [
         ...projects,
         { id: uid(), name: n, moduleBased: !!moduleBased, createdAt: t, updatedAt: t },
       ].sort((a, b) => a.name.localeCompare(b.name))
-      saveProjects(next)
+      try {
+        saveProjects(next)
+      } catch (e) {
+        const msg = e instanceof StorageError ? e.message : '保存失败'
+        return { ok: false, error: msg }
+      }
       setProjects(next)
       triggerRef.current()
-      return true
+      return { ok: true }
     },
     [projects],
   )
 
   const updateProject = useCallback(
-    (id: string, name: string, moduleBased?: boolean): boolean => {
+    (id: string, name: string, moduleBased?: boolean): { ok: boolean; error?: string } => {
       const n = normalizeName(name)
-      if (!n) return false
-      if (projects.some((p) => p.id !== id && p.name.toLowerCase() === n.toLowerCase())) return false
+      if (!n) return { ok: false, error: '项目名为空' }
+      if (projects.some((p) => p.id !== id && p.name.toLowerCase() === n.toLowerCase())) {
+        return { ok: false, error: '与其他项目重复' }
+      }
       const next = projects
         .map((p) =>
           p.id === id
@@ -349,25 +357,37 @@ export function StoreProvider({
             : p,
         )
         .sort((a, b) => a.name.localeCompare(b.name))
-      saveProjects(next)
+      try {
+        saveProjects(next)
+      } catch (e) {
+        const msg = e instanceof StorageError ? e.message : '保存失败'
+        return { ok: false, error: msg }
+      }
       setProjects(next)
       triggerRef.current()
-      return true
+      return { ok: true }
     },
     [projects],
   )
 
   /** 删除：打墓碑软删（同步协议需要墓碑传播删除；>90 天物理清理） */
-  const removeProject = useCallback((id: string) => {
+  const removeProject = useCallback((id: string): { ok: boolean; error?: string } => {
+    let result: { ok: boolean; error?: string } = { ok: true }
     setProjects((prev) => {
       const t = nowISO()
       const next = prev.map((p) =>
         p.id === id ? { ...p, deletedAt: t, updatedAt: t } : p,
       )
-      saveProjects(next)
+      try {
+        saveProjects(next)
+      } catch (e) {
+        result = { ok: false, error: e instanceof StorageError ? e.message : '删除失败' }
+        return prev
+      }
       triggerRef.current()
       return next
     })
+    return result
   }, [])
 
   /** 首次启动写入种子项目（只执行一次，由 App 调用） */

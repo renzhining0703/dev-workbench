@@ -9,6 +9,7 @@
 import express from 'express'
 import { createAuthRouter } from './routes/auth.mjs'
 import { createSyncRouter } from './routes/sync.mjs'
+import { createPushRouter } from './routes/push.mjs'
 import { requireAuth } from './middleware/auth.mjs'
 
 /**
@@ -17,8 +18,9 @@ import { requireAuth } from './middleware/auth.mjs'
  * @param {import('./store/users.mjs').UserStore} deps.userStore
  * @param {import('./store/sessions.mjs').SessionStore} deps.sessionStore
  * @param {import('./store/snapshots.mjs').SnapshotStore} deps.snapshotStore
+ * @param {import('./store/push-subscriptions.mjs').PushSubscriptionStore} deps.pushStore
  */
-export function createApp({ config, userStore, sessionStore, snapshotStore }) {
+export function createApp({ config, userStore, sessionStore, snapshotStore, pushStore }) {
   const app = express()
   app.disable('x-powered-by')
   // nginx 反代一层；express-rate-limit 依赖它还原真实客户端 IP
@@ -57,6 +59,12 @@ export function createApp({ config, userStore, sessionStore, snapshotStore }) {
     }),
   )
   app.use('/api', createSyncRouter({ snapshotStore, requireAuth: auth }))
+  if (pushStore) {
+    app.use(
+      '/api/push',
+      createPushRouter({ config, pushStore, requireAuth: auth }),
+    )
+  }
 
   // ---- 404（v1：{ok:false,error:'not found'}）----
   app.use((_req, res) => {

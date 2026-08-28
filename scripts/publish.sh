@@ -145,6 +145,8 @@ ssh "$SERVER" "
     pm2 reload dev-workbench-sync --update-env 2>/dev/null || pm2 start ecosystem.config.cjs --only dev-workbench-sync
     # 每日备份 cron 任务：reload 不拉起已退出的 cron 进程，按需 start（已在运行则忽略错误）
     pm2 start ecosystem.config.cjs --only dev-workbench-backup 2>/dev/null || true
+    # 每日 Web Push 推送 cron 任务（同上）
+    pm2 start ecosystem.config.cjs --only dev-workbench-push-daily 2>/dev/null || true
     pm2 save 2>/dev/null || true
   fi
 "

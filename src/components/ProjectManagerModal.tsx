@@ -45,25 +45,25 @@ export function ProjectManagerModal({
   }
 
   const handleAdd = () => {
-    const ok = addProject(newName, newModuleBased)
+    const { ok, error } = addProject(newName, newModuleBased)
     if (ok) {
       setNewName('')
       setNewModuleBased(false)
       flash(`已添加项目「${newName.trim()}」`)
     } else {
-      flash('添加失败：项目名为空或已存在')
+      flash(error ?? '添加失败：项目名为空或已存在')
     }
   }
 
   const handleSaveEdit = () => {
     if (!editingId) return
-    const ok = updateProject(editingId, editName, editModuleBased)
+    const { ok, error } = updateProject(editingId, editName, editModuleBased)
     if (ok) {
       setEditingId(null)
       setEditName('')
       flash('项目已更新')
     } else {
-      flash('保存失败：项目名为空或与其他项目重复')
+      flash(error ?? '保存失败：项目名为空或与其他项目重复')
     }
   }
 
@@ -75,8 +75,12 @@ export function ProjectManagerModal({
 
   const confirmDelete = () => {
     if (!deleting) return
-    removeProject(deleting.id)
-    flash(`已删除项目「${deleting.name}」（历史需求记录不受影响）`)
+    const { ok, error } = removeProject(deleting.id)
+    if (ok) {
+      flash(`已删除项目「${deleting.name}」（历史需求记录不受影响）`)
+    } else {
+      flash(error ?? '删除失败')
+    }
     setDeleting(null)
   }
 

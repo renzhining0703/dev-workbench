@@ -17,8 +17,11 @@ import { ImportModal } from './components/ImportModal'
 import { BackupModal } from './components/BackupModal'
 import { InstallPrompt } from './components/InstallPrompt'
 import { StatsView } from './components/StatsView'
+import { EfficiencyView } from './components/EfficiencyView'
 import { PreferencesModal } from './components/PreferencesModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
+import { PushModal } from './components/PushModal'
+import { CommandPalette, type PaletteTab } from './components/CommandPalette'
 import { AuthPage } from './components/AuthPage'
 import { UserMenu } from './components/UserMenu'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -152,6 +155,8 @@ function AppInner({
   const { theme, toggle } = useTheme()
   const [tab, setTab] = useState<Tab>('today')
   const [listView, setListView] = useState<ListView>('table')
+  // 统计 Tab 二级视图：req = 需求总览，eff = 个人效率
+  const [statsView, setStatsView] = useState<'req' | 'eff'>('req')
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Requirement | null>(null)
   const [cloneSource, setCloneSource] = useState<Requirement | null>(null)
@@ -161,10 +166,16 @@ function AppInner({
   const [projectOpen, setProjectOpen] = useState(false)
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  // Web Push 推送提醒设置
+  const [pushOpen, setPushOpen] = useState(false)
   const [archiveToast, setArchiveToast] = useState<{ count: number; months: number } | null>(null)
   const [undoToast, setUndoToast] = useState<{ label: string; items: Requirement[] } | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [importBanner, setImportBanner] = useState('')
+  // 全局命令面板（⌘K / Ctrl+K）
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  // 命令面板搜索待办 → 跳待办 Tab 并选中该日期（TodoView 消费后清空）
+  const [pendingTodoDate, setPendingTodoDate] = useState<string | null>(null)
   // 待办关联需求跳转：待办 chip 点击 → 切到需求列表并打开对应抽屉
   const [pendingReqId, setPendingReqId] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -344,9 +355,28 @@ function AppInner({
     setPendingReqId(reqId)
   }, [])
 
-  // 全局键盘快捷键：N 新建需求、/ 聚焦搜索
+  /** 命令面板：导航到指定 Tab */
+  const handlePaletteNavigate = useCallback((t: PaletteTab) => {
+    setTab(t)
+    setPaletteOpen(false)
+  }, [])
+
+  /** 命令面板：搜索到待办 → 跳待办 Tab 并选中对应日期 */
+  const handlePaletteJumpTodo = useCallback((date: string) => {
+    setPendingTodoDate(date)
+    setTab('todo')
+    setPaletteOpen(false)
+  }, [])
+
+  // 全局键盘快捷键：⌘K 命令面板、N 新建需求、/ 聚焦搜索、? 快捷键面板
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // ⌘K / Ctrl+K：打开或关闭命令面板（输入框内也生效）
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+        return
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const tag = (e.target as HTMLElement)?.tagName
       const isEditable =
@@ -378,6 +408,12 @@ function AppInner({
       <PreferencesModal
         open={preferencesOpen}
         onClose={() => setPreferencesOpen(false)}
+      />
+
+      <PushModal
+        open={pushOpen}
+        onClose={() => setPushOpen(false)}
+        token={auth.session?.token ?? null}
       />
 
       <ShortcutsModal
@@ -459,6 +495,32 @@ function AppInner({
           </nav>
 
           <div className="wb-header-actions">
+            {/* 全局搜索（⌘K）——PC 显示文字按钮，移动端图标 */}
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="hidden items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/75 transition hover:bg-white/10 hover:text-white md:flex"
+              aria-label="全局搜索"
+              title="全局搜索（⌘K）"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              搜索
+              <kbd className="rounded border border-white/25 px-1 text-[10px] leading-4">⌘K</kbd>
+            </button>
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="wb-icon-btn md:hidden"
+              aria-label="全局搜索"
+              title="全局搜索"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+            </button>
+
             <button className="wb-btn-primary" onClick={() => { setEditing(null); setFormOpen(true) }} title="新建需求（快捷键 N）">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
@@ -560,6 +622,19 @@ function AppInner({
                           <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
                         </svg>
                         开启上线提醒
+                      </button>
+                    )}
+                    {auth.session && (
+                      <button
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                        style={{ color: 'var(--wb-ink-2)' }}
+                        onClick={() => { setMobileMenuOpen(false); setPushOpen(true) }}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                        推送提醒
                       </button>
                     )}
                   </div>
@@ -674,6 +749,8 @@ function AppInner({
               onUpdateTodo={store.updateTodo}
               onRemoveTodo={store.removeTodo}
               onOpenRequirement={jumpToRequirement}
+              externalDate={pendingTodoDate ?? undefined}
+              onExternalDateConsumed={() => setPendingTodoDate(null)}
             />
           </div>
         ) : tab === 'list' ? (
@@ -712,9 +789,33 @@ function AppInner({
             )}
           </>
         ) : (
-          <div className="wb-view active">
-            <StatsView requirements={store.requirements} />
-          </div>
+          <>
+            <div className="wb-pills mb-4">
+              {(
+                [
+                  ['req', '需求总览'],
+                  ['eff', '个人效率'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setStatsView(key)}
+                  className={`wb-pill ${statsView === key ? 'active' : ''}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {statsView === 'req' ? (
+              <div className="wb-view active">
+                <StatsView requirements={store.requirements} />
+              </div>
+            ) : (
+              <div className="wb-view active">
+                <EfficiencyView todos={store.todos} />
+              </div>
+            )}
+          </>
         )}
       </main>
 
@@ -756,6 +857,34 @@ function AppInner({
           requirements: store.requirements.length,
           todos: store.todos.length,
           projects: store.projects.length,
+        }}
+      />
+
+      {/* 全局命令面板（⌘K / Ctrl+K） */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        requirements={store.requirements}
+        todos={store.todos}
+        projects={store.projects}
+        onNavigate={handlePaletteNavigate}
+        onNewRequirement={() => {
+          setEditing(null)
+          setFormOpen(true)
+          setPaletteOpen(false)
+        }}
+        onOpenRequirement={(id) => {
+          jumpToRequirement(id)
+          setPaletteOpen(false)
+        }}
+        onJumpTodo={handlePaletteJumpTodo}
+        onToggleView={() => {
+          setListView((v) => (v === 'table' ? 'kanban' : 'table'))
+          setPaletteOpen(false)
+        }}
+        onOpenShortcuts={() => {
+          setShortcutsOpen(true)
+          setPaletteOpen(false)
         }}
       />
     </div>

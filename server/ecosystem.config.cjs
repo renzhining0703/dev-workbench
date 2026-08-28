@@ -37,5 +37,19 @@ module.exports = {
     env: {
       DATA_DIR: __dirname + '/data/',
     },
+  }, {
+    // 每日 09:05 推送「今日待上线/待办」提醒（Web Push）
+    // 前置：data/env.local 配置 VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
+    name: 'dev-workbench-push-daily',
+    script: './scripts/push-daily.mjs',
+    node_args: '--no-warnings',
+    cwd: __dirname,
+    instances: 1,
+    exec_mode: 'fork',
+    autorestart: false,
+    cron: '5 9 * * *',
+    env: {
+      DATA_DIR: __dirname + '/data/',
+    },
   }],
 }

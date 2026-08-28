@@ -17,6 +17,7 @@ import type { Requirement, TodoItem } from '../types'
 import { toDateStr } from '../lib/utils'
 import { sortTodos } from '../lib/todos'
 import { TodoRow } from './TodoRow'
+import { TodoHeatmap } from './TodoHeatmap'
 
 const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日']
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -30,6 +31,9 @@ interface TodoViewProps {
   onRemoveTodo: (id: string) => void
   /** 点击关联需求 chip → 跳回需求抽屉 */
   onOpenRequirement?: (reqId: string) => void
+  /** 外部指定要跳转的日期（如命令面板搜索待办），消费后回调清空 */
+  externalDate?: string
+  onExternalDateConsumed?: () => void
 }
 
 /** 每天完成数（completedAt 缺失的旧数据回退用待办目标日期） */
@@ -82,6 +86,8 @@ export function TodoView({
   onUpdateTodo,
   onRemoveTodo,
   onOpenRequirement,
+  externalDate,
+  onExternalDateConsumed,
 }: TodoViewProps) {
   const today = toDateStr(new Date())
   const [selected, setSelected] = useState(today)
@@ -89,6 +95,14 @@ export function TodoView({
   const [calOpen, setCalOpen] = useState(false)
   const [calMonth, setCalMonth] = useState(() => startOfMonth(new Date()))
   const calRef = useRef<HTMLDivElement>(null)
+
+  // 外部跳转日期（命令面板搜索待办）：选中该日期后回调清空，避免重复触发
+  useEffect(() => {
+    if (!externalDate) return
+    setSelected(externalDate)
+    setCalOpen(false)
+    onExternalDateConsumed?.()
+  }, [externalDate, onExternalDateConsumed])
 
   const selectedDate = parseISO(selected)
   const dayTodos = useMemo(
@@ -167,6 +181,16 @@ export function TodoView({
           <div className="cap">{format(new Date(), 'M 月累计')}</div>
         </div>
       </div>
+
+      {/* 月历热力图：按天查看完成量，颜色越深完成越多 */}
+      <TodoHeatmap
+        todos={todos}
+        selected={selected}
+        onSelectDate={(d) => {
+          setSelected(d)
+          setCalOpen(false)
+        }}
+      />
 
       {/* 日期导航 + 待办列表 */}
       <div className="wb-card" style={{ padding: 18 }}>

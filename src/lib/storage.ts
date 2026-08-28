@@ -14,8 +14,30 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
+export class StorageError extends Error {
+  readonly code: 'QUOTA_EXCEEDED' | 'WRITE_FAILED'
+  constructor(code: 'QUOTA_EXCEEDED' | 'WRITE_FAILED', message: string) {
+    super(message)
+    this.name = 'StorageError'
+    this.code = code
+  }
+}
+
 function write<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value))
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch (e) {
+    const isQuota =
+      e instanceof Error &&
+      (e.name === 'QuotaExceededError' ||
+        /quota|exceeded|storage/i.test(e.message))
+    throw new StorageError(
+      isQuota ? 'QUOTA_EXCEEDED' : 'WRITE_FAILED',
+      isQuota
+        ? '本地存储空间不足，请导出备份后清理数据'
+        : '写入本地存储失败',
+    )
+  }
 }
 
 export function uid(): string {

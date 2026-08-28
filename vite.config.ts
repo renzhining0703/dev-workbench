@@ -14,6 +14,10 @@ export default defineConfig(({ command }) => ({
   plugins: [
     react(),
     VitePWA({
+      // 自定义 SW（src/sw.js，含 Web Push 处理）→ injectManifest 构建
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       // 个人项目无感刷新；切回 'prompt' 需要写 UI 提示
       registerType: 'autoUpdate',
       injectRegister: 'auto',
@@ -42,11 +46,11 @@ export default defineConfig(({ command }) => ({
           },
         ],
       },
-      workbox: {
+      // injectManifest 模式的 precache 配置（原 workbox.* 顶层项挪到这里）
+      // 注意：injectManifest 不支持 navigateFallback / cleanupOutdatedCaches 配置项，
+      // 二者已分别在 src/sw.js 里用 NavigationRoute 与 cleanupOutdatedCaches() 自行处理
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
-        // SPA 路由兜底：子路径下写绝对路径最稳
-        navigateFallback: '/dev-workbench/index.html',
-        cleanupOutdatedCaches: true,
       },
     }),
   ],

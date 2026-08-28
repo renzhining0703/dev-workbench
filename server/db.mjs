@@ -12,7 +12,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS users (
@@ -47,6 +47,28 @@ UPDATE users SET nickname = username WHERE nickname IS NULL;
 `
 
 /**
+ * v3：Web Push 订阅表。
+ * - 复合主键 (username, endpoint)：同一浏览器多账号登录各自成行；
+ *   同账号同设备重复注册走 upsert 覆盖（见 store）
+ * - keys 存 subscription.getKey('p256dh') / getKey('auth') 的 base64url（web-push 可直接用）
+ * - last_error：投递失败原因（404/410 等），供运维排查；成功推送后清空
+ * - user_agent：订阅时浏览器的 UA，方便识别同一账号下不同设备
+ */
+const SCHEMA_V3 = `
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  username   TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  endpoint   TEXT NOT NULL,
+  keys       TEXT NOT NULL,             -- JSON: { p256dh, auth }
+  user_agent TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_error TEXT,
+  PRIMARY KEY (username, endpoint)
+);
+CREATE INDEX IF NOT EXISTS idx_push_subs_username ON push_subscriptions(username);
+`
+
+/**
  * 打开（或创建）数据库并应用 schema。
  * @param {string} file 数据库文件路径
  * @returns {import('node:sqlite').DatabaseSync}
@@ -66,8 +88,9 @@ function migrate(db) {
   if (current > SCHEMA_VERSION) {
     throw new Error(`数据库 schema 版本 ${current} 比本程序支持的更高，请升级程序`)
   }
-  // 顺序升级：current=0 → v1；current=1 → v2；跳过已应用的版本
+  // 顺序升级：current=0 → v1；current=1 → v2；current=2 → v3；跳过已应用的版本
   if (current < 1) db.exec(SCHEMA_V1)
   if (current < 2) db.exec(SCHEMA_V2)
+  if (current < 3) db.exec(SCHEMA_V3)
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
 }

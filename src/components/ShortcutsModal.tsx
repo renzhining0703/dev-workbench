@@ -6,6 +6,7 @@ interface Props {
 }
 
 const SHORTCUTS: { keys: string[]; desc: string }[] = [
+  { keys: ['⌘K'], desc: '全局搜索 / 命令面板' },
   { keys: ['N'], desc: '新建需求' },
   { keys: ['/'], desc: '聚焦搜索框（需求列表页）' },
   { keys: ['Esc'], desc: '关闭弹窗 / 抽屉' },

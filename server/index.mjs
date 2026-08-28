@@ -19,6 +19,7 @@ import { openDatabase } from './db.mjs'
 import { UserStore } from './store/users.mjs'
 import { SessionStore } from './store/sessions.mjs'
 import { SnapshotStore } from './store/snapshots.mjs'
+import { PushSubscriptionStore } from './store/push-subscriptions.mjs'
 import { createApp } from './app.mjs'
 import { runStartup } from './startup.mjs'
 
@@ -27,7 +28,8 @@ const db = openDatabase(config.dbFile)
 const userStore = new UserStore(db)
 const sessionStore = new SessionStore(db)
 const snapshotStore = new SnapshotStore(db)
-const app = createApp({ config, userStore, sessionStore, snapshotStore })
+const pushStore = new PushSubscriptionStore(db)
+const app = createApp({ config, userStore, sessionStore, snapshotStore, pushStore })
 
 const server = app.listen(config.port, config.host, () => {
   // 启动钩子放在 listen 成功之后；端口冲突不会留下半初始化的数据表
