@@ -1,4 +1,4 @@
-import type { TodoItem, TodoPriority } from '../types'
+import type { Requirement, RequirementStatus, TodoItem, TodoPriority } from '../types'
 import { toDateStr } from './utils'
 
 /** 优先级元信息：展示标签 / 排序权重（越小越靠前） */
@@ -65,4 +65,45 @@ export function buildTodoSummary(todos: TodoItem[]) {
     }
   }
   return { undone, high, overdue }
+}
+
+/* ---------- 需求列表「+ 待办」入口 ---------- */
+
+/**
+ * 可从需求列表生成待办的状态：仅「待开发 / 开发中」。
+ * 已提测及之后的需求不再需要排开发待办，暂停/归档的也不排。
+ */
+export const TODO_ELIGIBLE_STATUSES: readonly RequirementStatus[] = ['pending', 'developing']
+
+/** 该需求是否允许生成待办（决定操作列按钮是否展示） */
+export function canAddTodo(r: Pick<Requirement, 'status'>): boolean {
+  return TODO_ELIGIBLE_STATUSES.includes(r.status)
+}
+
+/**
+ * 某需求已关联的待办，按日期升序。
+ * 入参应是 active() 过滤后的列表（墓碑不计入），调用方保证。
+ */
+export function linkedTodosOf(todos: TodoItem[], requirementId: string): TodoItem[] {
+  return todos
+    .filter((t) => t.requirementId === requirementId)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/**
+ * requirementId → 关联待办条数，供列表按钮角标使用。
+ * 一次遍历建 Map，避免每行都 filter 一遍全量待办。
+ */
+export function countTodosByRequirement(todos: TodoItem[]): Map<string, number> {
+  const m = new Map<string, number>()
+  for (const t of todos) {
+    if (!t.requirementId) continue
+    m.set(t.requirementId, (m.get(t.requirementId) ?? 0) + 1)
+  }
+  return m
+}
+
+/** 「+ 待办」默认文案，与 TodoPanel 任务卡片的一键生成保持一致 */
+export function defaultTodoContent(r: Pick<Requirement, 'name'>): string {
+  return `开发：${r.name}`
 }

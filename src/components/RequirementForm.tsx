@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import type { Requirement } from '../types'
 import { useStore } from '../store/StoreContext'
+import { isVisible } from '../lib/fields'
+import { visibleStatusOptions } from '../lib/statuses'
 import { Modal } from './ui'
-import { Select, statusSelectOptions } from './Select'
+import { Select } from './Select'
 
-export type RequirementDraft = Omit<Requirement, 'id' | 'createdAt' | 'updatedAt'>
+export type RequirementDraft = Omit<Requirement, 'id' | 'updatedAt'>
 
 /** 新建需求时的分支前缀：`feature/YYYYMMDD/REQ-`，日期按当时动态计算 */
 const newRequirementBranchPrefix = (): string =>
@@ -18,6 +20,7 @@ const emptyDraft = (): RequirementDraft => ({
   branch: newRequirementBranchPrefix(),
   publishModule: '',
   status: 'pending',
+  createdAt: new Date().toISOString(),
   devStartTime: null,
   devEndTime: null,
   testTime: null,
@@ -29,6 +32,18 @@ const emptyDraft = (): RequirementDraft => ({
 function toDateInput(iso: string | null): string {
   if (!iso) return ''
   return iso.slice(0, 10)
+}
+
+/** 点击输入框任意位置即唤起原生日期选择器（Firefox 等浏览器默认只有点日历 icon 才打开） */
+function openDatePicker(e: React.MouseEvent<HTMLInputElement>) {
+  const input = e.currentTarget
+  if (typeof input.showPicker === 'function') {
+    try {
+      input.showPicker()
+    } catch {
+      /* 浏览器不支持或选择器已打开：忽略 */
+    }
+  }
 }
 
 /** 时间字段以 yyyy-MM-dd 存储（无时区问题，便于导出/判断） */
@@ -49,10 +64,8 @@ export function RequirementFormModal({
   const [draft, setDraft] = useState<RequirementDraft>(emptyDraft)
   // 「+ 添加项目」下拉的开关
   const [addingProject, setAddingProject] = useState(false)
-  // 创建时间只读展示：编辑时取原值，新建/克隆时为今天
-  const [createdAtStr, setCreatedAtStr] = useState(() => new Date().toISOString())
 
-  const { projects } = useStore()
+  const { projects, visibleFields, visibleStatuses } = useStore()
 
   /** 项目名 → 是否支持分模块发布 */
   const moduleBasedMap = useMemo(() => {
@@ -74,7 +87,6 @@ export function RequirementFormModal({
     if (!open) return
     if (initial) {
       // 编辑模式：所有字段原样回填
-      setCreatedAtStr(initial.createdAt)
       setDraft({
         name: initial.name,
         project: initial.project,
@@ -82,6 +94,7 @@ export function RequirementFormModal({
         branch: initial.branch,
         publishModule: initial.publishModule,
         status: initial.status,
+        createdAt: initial.createdAt,
         devStartTime: initial.devStartTime,
         devEndTime: initial.devEndTime,
         testTime: initial.testTime,
@@ -90,7 +103,6 @@ export function RequirementFormModal({
       })
     } else if (prefill) {
       // 克隆模式：复制模板字段，时间清空、状态重置 pending、分支用今日新前缀
-      setCreatedAtStr(new Date().toISOString())
       setDraft({
         name: prefill.name ? `${prefill.name} (副本)` : '',
         project: prefill.project ?? '',
@@ -98,6 +110,7 @@ export function RequirementFormModal({
         branch: newRequirementBranchPrefix(),
         publishModule: prefill.publishModule ?? '',
         status: 'pending',
+        createdAt: new Date().toISOString(),
         devStartTime: null,
         devEndTime: null,
         testTime: null,
@@ -106,7 +119,6 @@ export function RequirementFormModal({
       })
     } else {
       // 新建模式
-      setCreatedAtStr(new Date().toISOString())
       setDraft(emptyDraft())
     }
     setAddingProject(false)
@@ -171,157 +183,180 @@ export function RequirementFormModal({
           />
         </div>
 
-        <div className="sm:col-span-2">
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
-            所属项目
-            <span className="ml-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>一个需求可关联多个项目，各自指定发布方式</span>
-          </label>
-          <div className="space-y-2">
-            {draft.projects.map((ref) => {
-              const moduleBased = moduleBasedMap.get(ref.project) ?? false
-              return (
-                <div
-                  key={ref.project}
-                  className="flex items-center gap-2 rounded-lg border border-[var(--wb-line)] px-2.5 py-1.5"
-                >
-                  <span className="shrink-0 rounded-md bg-[var(--wb-surface-2)] px-2 py-0.5 text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
-                    {ref.project}
-                  </span>
-                  {moduleBased ? (
-                    <input
-                      className="wb-input h-8 flex-1 py-1 text-xs"
-                      placeholder="发布模块，如 make/（留空 = 全量）"
-                      value={ref.publishModule}
-                      onChange={(e) => setProjectModule(ref.project, e.target.value)}
-                    />
-                  ) : (
-                    <span className="flex-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-                      全量发布
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-md p-1 transition hover:bg-[var(--wb-surface-2)] hover:text-[var(--wb-danger)]"
-                    style={{ color: 'var(--wb-ink-3)' }}
-                    title="移除该项目"
-                    onClick={() => removeProjectRef(ref.project)}
+        {isVisible(visibleFields, 'project') && (
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
+              所属项目
+              <span className="ml-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>一个需求可关联多个项目，各自指定发布方式</span>
+            </label>
+            <div className="space-y-2">
+              {draft.projects.map((ref) => {
+                const moduleBased = moduleBasedMap.get(ref.project) ?? false
+                return (
+                  <div
+                    key={ref.project}
+                    className="flex items-center gap-2 rounded-lg border border-[var(--wb-line)] px-2.5 py-1.5"
                   >
-                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                    </svg>
-                  </button>
-                </div>
-              )
-            })}
-            {addingProject ? (
-              <Select
-                value={null}
-                onChange={(p) => p && addProjectRef(p)}
-                options={projectOptions}
-                placeholder="搜索并选择项目"
-                searchable
-                clearable
-                onClear={() => setAddingProject(false)}
-              />
-            ) : (
-              <button
-                type="button"
-                className="w-full rounded-lg border border-dashed border-[var(--wb-line-2)] px-3 py-1.5 text-xs transition hover:border-[var(--wb-brand-400)] hover:text-[var(--wb-brand-500)]"
-                style={{ color: 'var(--wb-ink-2)' }}
-                disabled={projectOptions.length === 0}
-                onClick={() => setAddingProject(true)}
-              >
-                + 添加项目
-                {projectOptions.length === 0 && '（项目库已全部选中，可到顶栏「项目管理」维护）'}
-              </button>
-            )}
+                    <span className="shrink-0 rounded-md bg-[var(--wb-surface-2)] px-2 py-0.5 text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
+                      {ref.project}
+                    </span>
+                    {isVisible(visibleFields, 'module') && moduleBased ? (
+                      <input
+                        className="wb-input h-8 flex-1 py-1 text-xs"
+                        placeholder="发布模块，如 make/（留空 = 全量）"
+                        value={ref.publishModule}
+                        onChange={(e) => setProjectModule(ref.project, e.target.value)}
+                      />
+                    ) : (
+                      <span className="flex-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+                        全量发布
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-md p-1 transition hover:bg-[var(--wb-surface-2)] hover:text-[var(--wb-danger)]"
+                      style={{ color: 'var(--wb-ink-3)' }}
+                      title="移除该项目"
+                      onClick={() => removeProjectRef(ref.project)}
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                      </svg>
+                    </button>
+                  </div>
+                )
+              })}
+              {addingProject ? (
+                <Select
+                  value={null}
+                  onChange={(p) => p && addProjectRef(p)}
+                  options={projectOptions}
+                  placeholder="搜索并选择项目"
+                  searchable
+                  clearable
+                  onClear={() => setAddingProject(false)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="w-full rounded-lg border border-dashed border-[var(--wb-line-2)] px-3 py-1.5 text-xs transition hover:border-[var(--wb-brand-400)] hover:text-[var(--wb-brand-500)]"
+                  style={{ color: 'var(--wb-ink-2)' }}
+                  disabled={projectOptions.length === 0}
+                  onClick={() => setAddingProject(true)}
+                >
+                  + 添加项目
+                  {projectOptions.length === 0 && '（项目库已全部选中，可到顶栏「项目管理」维护）'}
+                </button>
+              )}
+            </div>
+            <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+              选项来自「项目管理」，可到顶栏维护；项目是否支持分模块发布也在那里配置
+            </p>
           </div>
-          <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-            选项来自「项目管理」，可到顶栏维护；项目是否支持分模块发布也在那里配置
-          </p>
-        </div>
+        )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>代码分支</label>
-          <input
-            className="wb-input"
-            placeholder="如：feature/login-optimize"
-            value={draft.branch}
-            onChange={(e) => set('branch', e.target.value)}
-          />
-          <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-            新建时自动填入 <code className="rounded bg-[var(--wb-surface-2)] px-1 py-0.5">feature/&lt;今日&gt;/REQ-</code>，可继续修改
-          </p>
-        </div>
+        {isVisible(visibleFields, 'branch') && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>代码分支</label>
+            <input
+              className="wb-input"
+              placeholder="如：feature/login-optimize"
+              value={draft.branch}
+              onChange={(e) => set('branch', e.target.value)}
+            />
+            <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+              新建时自动填入 <code className="rounded bg-[var(--wb-surface-2)] px-1 py-0.5">feature/&lt;今日&gt;/REQ-</code>，可继续修改
+            </p>
+          </div>
+        )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>当前状态</label>
-          <Select
-            value={draft.status}
-            onChange={(s) => set('status', s)}
-            options={statusSelectOptions}
-          />
-        </div>
+        {isVisible(visibleFields, 'status') && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>当前状态</label>
+            <Select
+              value={draft.status}
+              onChange={(s) => set('status', s)}
+              options={visibleStatusOptions(visibleStatuses, draft.status)}
+            />
+          </div>
+        )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>创建时间</label>
-          <input
-            type="date"
-            className="wb-input"
-            value={toDateInput(createdAtStr)}
-            disabled
-          />
-        </div>
+        {isVisible(visibleFields, 'createdAt') && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>创建时间</label>
+            <input
+              type="date"
+              className="wb-input"
+              value={toDateInput(draft.createdAt)}
+              onChange={(e) => { if (e.target.value) set('createdAt', e.target.value) }}
+              onClick={openDatePicker}
+            />
+          </div>
+        )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>开发开始时间</label>
-          <input
-            type="date"
-            className="wb-input"
-            value={toDateInput(draft.devStartTime)}
-            onChange={(e) => set("devStartTime", e.target.value || null)}
-          />
-        </div>
+        {isVisible(visibleFields, 'devStartTime') && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>开始时间</label>
+            <input
+              type="date"
+              className="wb-input"
+              value={toDateInput(draft.devStartTime)}
+              onChange={(e) => set("devStartTime", e.target.value || null)}
+              onClick={openDatePicker}
+            />
+          </div>
+        )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>开发结束时间</label>
-          <input
-            type="date"
-            className="wb-input"
-            value={toDateInput(draft.devEndTime)}
-            onChange={(e) => set("devEndTime", e.target.value || null)}
-          />
-        </div>
+        {isVisible(visibleFields, 'devEndTime') && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>完成时间</label>
+            <input
+              type="date"
+              className="wb-input"
+              value={toDateInput(draft.devEndTime)}
+              onChange={(e) => set("devEndTime", e.target.value || null)}
+              onClick={openDatePicker}
+            />
+          </div>
+        )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>提测时间</label>
-          <input
-            type="date"
-            className="wb-input"
-            value={toDateInput(draft.testTime)}
-            onChange={(e) => set("testTime", e.target.value || null)}
-          />
-        </div>
+        {isVisible(visibleFields, 'testTime') && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>提测时间</label>
+            <input
+              type="date"
+              className="wb-input"
+              value={toDateInput(draft.testTime)}
+              onChange={(e) => set("testTime", e.target.value || null)}
+              onClick={openDatePicker}
+            />
+          </div>
+        )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>上线时间</label>
-          <input
-            type="date"
-            className="wb-input"
-            value={toDateInput(draft.publishTime)}
-            onChange={(e) => set("publishTime", e.target.value || null)}
-          />
-        </div>
+        {isVisible(visibleFields, 'publishTime') && (
+          <div>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>上线时间</label>
+            <input
+              type="date"
+              className="wb-input"
+              value={toDateInput(draft.publishTime)}
+              onChange={(e) => set("publishTime", e.target.value || null)}
+              onClick={openDatePicker}
+            />
+          </div>
+        )}
 
-        <div className="sm:col-span-2">
-          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>备注</label>
-          <textarea
-            className="wb-input min-h-[72px] resize-y"
-            placeholder="补充说明（可选）"
-            value={draft.remark}
-            onChange={(e) => set('remark', e.target.value)}
-          />
-        </div>
+        {isVisible(visibleFields, 'remark') && (
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>备注</label>
+            <textarea
+              className="wb-input min-h-[72px] resize-y"
+              placeholder="补充说明（可选）"
+              value={draft.remark}
+              onChange={(e) => set('remark', e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       <div className="mt-6 flex justify-end gap-2">

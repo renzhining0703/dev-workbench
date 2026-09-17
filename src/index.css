@@ -844,6 +844,8 @@ html.dark .wb-nav-btn.active { background: var(--wb-brand-700); color: #EDF1EA; 
 }
 .wb-btn-primary:hover { background: #D39C3B; }
 .wb-btn-primary:active { transform: translateY(1px); }
+.wb-btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+.wb-btn-primary:disabled:hover { background: var(--wb-accent); transform: none; }
 html.dark .wb-btn-primary { color: #F6EFDF; }
 .wb-icon-btn {
   width: 34px; height: 34px;
@@ -971,6 +973,18 @@ html.dark .st-paused { color: #D2A76B; }
 .st-published .dot { background: var(--wb-success); }
 .st-archived { color: var(--wb-ink-3); background: var(--wb-surface-2); }
 .st-archived .dot { background: var(--wb-ink-3); }
+.st-notStarted { color: #0891b2; background: rgba(6,182,212,.12); }
+.st-notStarted .dot { background: #06b6d4; }
+html.dark .st-notStarted { color: #22d3ee; }
+.st-inProgress { color: #4f46e5; background: rgba(99,102,241,.12); }
+.st-inProgress .dot { background: #6366f1; }
+html.dark .st-inProgress { color: #818cf8; }
+.st-toConfirm { color: #e11d48; background: rgba(244,63,94,.12); }
+.st-toConfirm .dot { background: #f43f5e; }
+html.dark .st-toConfirm { color: #fb7185; }
+.st-done { color: #0d9488; background: rgba(20,184,166,.12); }
+.st-done .dot { background: #14b8a6; }
+html.dark .st-done { color: #2dd4bf; }
 
 /* 表格 */
 .wb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -997,6 +1011,8 @@ html.dark .st-paused { color: #D2A76B; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;
 }
 .wb-code:hover { color: var(--wb-brand-500); }
+/* 分支名：整列已加宽，不再用 max-width 截断，允许换行完整展示 */
+.wb-code.branch { max-width: none; white-space: normal; word-break: break-all; }
 .wb-code.module { background: var(--wb-accent-soft); color: var(--wb-accent-600); }
 html.dark .wb-code.module { color: var(--wb-accent); }
 
@@ -1030,6 +1046,38 @@ html.dark .wb-pb-overflow { color: var(--wb-accent); }
 .wb-icon-sm:hover { background: var(--wb-surface-2); color: var(--wb-brand-500); }
 .wb-icon-sm.danger:hover { background: var(--wb-danger-soft); color: var(--wb-danger); }
 .wb-icon-sm svg { width: 15px; height: 15px; }
+.wb-icon-sm.ok:hover { background: var(--wb-success-soft); color: var(--wb-success); }
+
+/* 图标按钮角标（如「+ 待办」上的已有关联待办条数） */
+.wb-icon-sm { position: relative; }
+.wb-icon-badge {
+  position: absolute; top: 1px; right: 1px;
+  min-width: 13px; height: 13px; padding: 0 3px;
+  border-radius: 999px; background: var(--wb-brand-500); color: #F6EFDF;
+  font-size: 9px; font-weight: 700; line-height: 13px; text-align: center;
+  font-variant-numeric: tabular-nums; pointer-events: none;
+}
+
+/* 优先级三选一（添加待办弹框） */
+.wb-prio-group { display: inline-flex; gap: 6px; }
+.wb-prio-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px; border-radius: 8px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--wb-line); background: var(--wb-surface);
+  color: var(--wb-ink-2); transition: border-color .15s, background .15s, color .15s;
+}
+.wb-prio-btn:hover { border-color: var(--wb-brand-400); color: var(--wb-ink); }
+.wb-prio-btn.active { border-color: var(--wb-brand-500); background: var(--wb-brand-soft, rgba(42,112,86,.1)); color: var(--wb-ink); font-weight: 600; }
+.wb-prio-btn .dot { width: 7px; height: 7px; border-radius: 999px; }
+
+/* 弹框内的提示条 */
+.wb-hint-box {
+  display: flex; gap: 8px; padding: 9px 11px; border-radius: 9px;
+  font-size: 12px; line-height: 1.6;
+  background: var(--wb-surface-2); color: var(--wb-ink-2);
+  border: 1px solid var(--wb-line);
+}
+.wb-hint-box.warn { background: var(--wb-warn-soft); color: var(--wb-warn); border-color: transparent; }
 
 /* 筛选条 */
 .wb-filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }

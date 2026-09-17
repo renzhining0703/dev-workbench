@@ -12,14 +12,21 @@ import {
   formatProjectModuleLine,
 } from '../lib/projects'
 import { useStore } from '../store/StoreContext'
+import { isVisible, type VisibleFields, type TimeFieldKey } from '../lib/fields'
+import { isStatusVisible, visibleStatusOptions } from '../lib/statuses'
 import { ConfirmDialog, EmptyState, SkeletonRows } from './ui'
-import { Select, statusSelectOptions } from './Select'
+import { Select } from './Select'
 import { RequirementDrawer } from './RequirementDrawer'
+import { AddTodoIconButton } from './AddTodoModal'
+import { canAddTodo } from '../lib/todos'
 
 type StatusFilter = 'all' | RequirementStatus
 
-/** 移动端高频 Tab：保持一屏内可达（含关键工作流节点"待上线"） */
-const HIGH_FREQ_STATUSES: RequirementStatus[] = ['pending', 'developing', 'testing', 'ready']
+/** 移动端高频 Tab：活跃工作流状态（4 开发 + 4 通用），保持一屏内可达 */
+const HIGH_FREQ_STATUSES: RequirementStatus[] = [
+  'pending', 'developing', 'testing', 'ready',
+  'notStarted', 'inProgress', 'toConfirm', 'done',
+]
 /** 移动端低频状态：藏在"更多"下拉里；桌面端仍直接展示 */
 const LOW_FREQ_STATUSES: RequirementStatus[] = ['paused', 'published', 'archived']
 /** 项目数量超过此阈值时显示 "(等N个)" 后缀，点击弹层展示全部 */
@@ -65,7 +72,7 @@ function readUrlParam(key: string, fallback: string): string {
   }
 }
 
-const VALID_STATUSES: StatusFilter[] = ['all', 'pending', 'developing', 'testing', 'ready', 'paused', 'published', 'archived']
+const VALID_STATUSES: StatusFilter[] = ['all', ...STATUS_FLOW]
 const VALID_SORT_FIELDS: SortField[] = ['createdAt', 'publishTime', 'status', 'name']
 const VALID_SORT_DIRS: SortDir[] = ['asc', 'desc']
 
@@ -80,6 +87,10 @@ interface Props {
   onDelete: (id: string) => void
   onBatchDelete?: (ids: string[]) => void
   onStatusChange: (id: string, status: RequirementStatus) => void
+  /** 生成待办：仅「待开发 / 开发中」的需求展示入口；未传则整体隐藏 */
+  onAddTodo?: (r: Requirement) => void
+  /** requirementId → 已有关联待办条数（按钮角标） */
+  todoCounts?: Map<string, number>
   /** 搜索框 ref，供全局快捷键 / 聚焦 */
   searchInputRef?: React.Ref<HTMLInputElement>
   /** 外部请求打开某个需求的抽屉（如待办关联需求跳转）；变化时触发 */
@@ -88,11 +99,11 @@ interface Props {
   onExternalOpened?: () => void
 }
 
-/** 时间列展示顺序：创建 / 开发开始 / 开发结束 / 提测 / 上线 */
-const TIME_FIELDS: { key: keyof Requirement; label: string }[] = [
+/** 时间列展示顺序：创建 / 开始 / 完成 / 提测 / 上线 */
+const TIME_FIELDS: { key: TimeFieldKey; label: string }[] = [
   { key: 'createdAt', label: '创建' },
-  { key: 'devStartTime', label: '开发' },
-  { key: 'devEndTime', label: '结束' },
+  { key: 'devStartTime', label: '开始' },
+  { key: 'devEndTime', label: '完成' },
   { key: 'testTime', label: '提测' },
   { key: 'publishTime', label: '上线' },
 ]
@@ -132,9 +143,11 @@ function TestDueBadge({ r }: { r: Requirement }) {
 /** 时间单元格：所有时间点合并为一列、一行内联展示（不换行）。
  * 空值自动跳过；全部为空时显示 —；今天的日期高亮。
  * wrap 为 true 时（移动端卡片）允许折行。
+ * 只展示 visibleFields 里开启的时间字段。
  */
-function TimeCell({ r, wrap = false }: { r: Requirement; wrap?: boolean }) {
+function TimeCell({ r, fields, wrap = false }: { r: Requirement; fields: VisibleFields; wrap?: boolean }) {
   const items = TIME_FIELDS.map(({ key, label }) => {
+    if (!isVisible(fields, key)) return null
     const iso = r[key] as string | null
     const date = fmtDateShort(iso)
     if (date === '—') return null
@@ -165,6 +178,8 @@ export function RequirementTable({
   onDelete,
   onBatchDelete,
   onStatusChange,
+  onAddTodo,
+  todoCounts,
   searchInputRef,
   externalOpenId,
   onExternalOpened,
@@ -181,6 +196,7 @@ export function RequirementTable({
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [copiedBranch, setCopiedBranch] = useState<string | null>(null)
   const [copiedModule, setCopiedModule] = useState<string | null>(null)
+  const [copiedName, setCopiedName] = useState<string | null>(null)
   /** 项目溢出 popover：超过阈值（见 PROJECT_OVERFLOW_THRESHOLD）时点击展示全部 */
   const [overflow, setOverflow] = useState<{
     r: Requirement
@@ -332,11 +348,50 @@ export function RequirementTable({
   }
 
   // 项目下拉数据源：来自项目库（顶栏「项目管理」维护）
-  const { projects } = useStore()
+  const { projects, visibleFields, visibleStatuses } = useStore()
   const projectOptions = useMemo(
     () => projects.map((p) => ({ value: p.name, label: p.name })),
     [projects],
   )
+
+  // 状态筛选 pill 按显隐配置过滤
+  const visibleHighFreq = useMemo(
+    () => HIGH_FREQ_STATUSES.filter((s) => isStatusVisible(visibleStatuses, s)),
+    [visibleStatuses],
+  )
+  const visibleLowFreq = useMemo(
+    () => LOW_FREQ_STATUSES.filter((s) => isStatusVisible(visibleStatuses, s)),
+    [visibleStatuses],
+  )
+
+  // 字段显隐派生的列/单元格开关（与表单、抽屉、看板读同一份配置）
+  const showProject = isVisible(visibleFields, 'project')
+  const showBranch = isVisible(visibleFields, 'branch')
+  const showModule = isVisible(visibleFields, 'module')
+  const showStatus = isVisible(visibleFields, 'status')
+  const showRemark = isVisible(visibleFields, 'remark')
+  const showTime =
+    isVisible(visibleFields, 'createdAt') ||
+    isVisible(visibleFields, 'devStartTime') ||
+    isVisible(visibleFields, 'devEndTime') ||
+    isVisible(visibleFields, 'testTime') ||
+    isVisible(visibleFields, 'publishTime')
+  const showProjectBranch = showProject || showBranch
+
+  // 表格最小宽度：以全列默认值（1160 / 批量模式 1200）为基准，
+  // 隐藏带固定 min-w 的列时相应扣减，避免字段隐藏后仍强制横向滚动。
+  const tableMinWidth = useMemo(() => {
+    let w = selectMode ? 1230 : 1190
+    if (!showProjectBranch) w -= 330
+    if (!showModule) w -= 180
+    if (!showTime) w -= 340
+    return w
+  }, [selectMode, showProjectBranch, showModule, showTime])
+
+  // 骨架屏列数：与可见列保持一致
+  const skeletonCols =
+    (selectMode ? 1 : 0) + 1 + (showProjectBranch ? 1 : 0) + (showModule ? 1 : 0) +
+    (showStatus ? 1 : 0) + (showTime ? 1 : 0) + 1
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
@@ -440,7 +495,7 @@ export function RequirementTable({
     if (items.length === 0) return
     exportCsv(
       `需求清单_${new Date().toISOString().slice(0, 10)}.csv`,
-      ['需求名称', '项目', '分支', '发布模块', '状态', '创建时间', '开发开始', '开发结束', '提测时间', '上线时间', '备注'],
+      ['需求名称', '项目', '分支', '发布模块', '状态', '创建时间', '开始时间', '完成时间', '提测时间', '上线时间', '备注'],
       items.map((r) => [
         r.name, requirementProjectDisplay(r), r.branch, requirementModuleDisplay(r),
         statusMeta(r.status).label,
@@ -481,7 +536,7 @@ export function RequirementTable({
       {/* 筛选工具栏 */}
       <div className="wb-filter-bar" style={{ alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: '1 1 auto', minWidth: 0 }}>
-          {/* 状态筛选：移动端 wrap 让所有按钮完整可见，桌面端不 wrap（单行展示全部 8 个） */}
+          {/* 状态筛选：移动端 wrap 让所有按钮完整可见，桌面端不 wrap（单行展示全部可见状态） */}
           <div className="wb-pills">
             {/* 全部（单独处理，避免与 RequirementStatus 类型混用） */}
             <button
@@ -493,7 +548,7 @@ export function RequirementTable({
             </button>
 
             {/* 高频：桌面与移动都展示 */}
-            {HIGH_FREQ_STATUSES.map((s) => (
+            {visibleHighFreq.map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
@@ -505,7 +560,7 @@ export function RequirementTable({
             ))}
 
             {/* 低频：仅桌面直接展示（移动端藏在更多下拉里） */}
-            {LOW_FREQ_STATUSES.map((s) => (
+            {visibleLowFreq.map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
@@ -522,12 +577,12 @@ export function RequirementTable({
                 ref={moreButtonRef}
                 onClick={() => setMoreOpen((v) => !v)}
                 className={`wb-pill ${
-                  statusFilter !== 'all' && LOW_FREQ_STATUSES.includes(statusFilter as RequirementStatus)
+                  statusFilter !== 'all' && visibleLowFreq.includes(statusFilter as RequirementStatus)
                     ? 'active'
                     : ''
                 }`}
                 style={
-                  statusFilter !== 'all' && LOW_FREQ_STATUSES.includes(statusFilter as RequirementStatus)
+                  statusFilter !== 'all' && visibleLowFreq.includes(statusFilter as RequirementStatus)
                     ? undefined
                     : moreOpen
                       ? { background: 'var(--wb-surface-2)', color: 'var(--wb-ink)' }
@@ -551,7 +606,7 @@ export function RequirementTable({
                       className="fixed z-50 w-36 overflow-hidden rounded-xl shadow-lg"
                       style={{ top: morePos.top, right: morePos.right, background: 'var(--wb-surface)', border: '1px solid var(--wb-line)' }}
                     >
-                      {LOW_FREQ_STATUSES.map((s) => {
+                      {visibleLowFreq.map((s) => {
                         const selected = statusFilter === s
                         return (
                           <button
@@ -681,7 +736,7 @@ export function RequirementTable({
                   clearSelection()
                 }
               }}
-              options={statusSelectOptions}
+              options={visibleStatusOptions(visibleStatuses)}
             />
             <button className="wb-btn-ghost" onClick={handleBatchExport}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -715,8 +770,8 @@ export function RequirementTable({
           <>
             {/* 桌面骨架行 */}
             <div className="hidden overflow-x-auto md:block">
-              <table className={`wb-table ${selectMode ? 'min-w-[1200px]' : 'min-w-[1160px]'}`}>
-                <SkeletonRows rows={5} cols={selectMode ? 7 : 6} />
+              <table className="wb-table" style={{ minWidth: tableMinWidth }}>
+                <SkeletonRows rows={5} cols={skeletonCols} />
               </table>
             </div>
             {/* 移动端骨架卡片 */}
@@ -771,7 +826,7 @@ export function RequirementTable({
           <>
             {/* 桌面表格 */}
             <div className="hidden overflow-x-auto md:block">
-              <table className={`wb-table ${selectMode ? 'min-w-[1200px]' : 'min-w-[1160px]'}`}>
+              <table className="wb-table" style={{ minWidth: tableMinWidth }}>
                 <thead>
                   <tr>
                     {selectMode && (
@@ -794,18 +849,20 @@ export function RequirementTable({
                         <SortIcon active={sortField === 'name'} dir={sortDir} />
                       </span>
                     </th>
-                    <th className="min-w-[300px]">项目 / 分支</th>
-                    <th className="min-w-[180px]">发布模块</th>
-                    <th
-                      className="cursor-pointer select-none"
-                      onClick={() => toggleSort('status')}
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        状态
-                        <SortIcon active={sortField === 'status'} dir={sortDir} />
-                      </span>
-                    </th>
-                    <th className="min-w-[340px]">时间</th>
+                    {showProjectBranch && <th className="min-w-[330px]">项目 / 分支</th>}
+                    {showModule && <th className="min-w-[180px]">发布模块</th>}
+                    {showStatus && (
+                      <th
+                        className="cursor-pointer select-none"
+                        onClick={() => toggleSort('status')}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          状态
+                          <SortIcon active={sortField === 'status'} dir={sortDir} />
+                        </span>
+                      </th>
+                    )}
+                    {showTime && <th className="min-w-[340px]">时间</th>}
                     <th className="sticky right-0 z-10" style={{ textAlign: 'right', boxShadow: '-4px 0 8px -4px rgba(0,0,0,.06)' }}>
                       操作
                     </th>
@@ -816,10 +873,12 @@ export function RequirementTable({
                   return (
                     <tr
                       key={r.id}
+                      onClick={() => setDrawerId(r.id)}
+                      className="cursor-pointer"
                       style={selectedIds.has(r.id) ? { background: BRAND_SOFT } : undefined}
                     >
                       {selectMode && (
-                        <td style={{ textAlign: 'center' }}>
+                        <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={selectedIds.has(r.id)}
@@ -832,73 +891,95 @@ export function RequirementTable({
                       <td>
                         <div
                           className="wb-req-name"
-                          onClick={() => setDrawerId(r.id)}
-                          title="点击查看详情"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            copyWithFeedback(r.name, setCopiedName)
+                          }}
+                          title="点击复制名称"
                         >
-                          {highlight(r.name, keyword)}
+                          {copiedName === r.name ? '✓ 已复制' : highlight(r.name, keyword)}
                         </div>
-                        {r.remark && (
+                        {showRemark && r.remark && (
                           <div className="wb-remark">
                             {highlight(r.remark, keyword)}
                           </div>
                         )}
                         <TestDueBadge r={r} />
                       </td>
-                      <td className="min-w-[300px]">
-                        <ProjectBranchCell
-                          r={r}
-                          keyword={keyword}
-                          copiedBranch={copiedBranch}
-                          onCopyBranch={(b) => copyWithFeedback(b, setCopiedBranch)}
-                          onOpenOverflow={(e) => {
-                            overflowAnchorRef.current = e.currentTarget
-                            // 同步算位置，避免 useEffect 跑完前闪到 (0,0)
-                            const { top, left } = computeOverflowPos(e.currentTarget.getBoundingClientRect())
-                            setOverflow({ r, anchorTop: top, anchorLeft: left })
-                          }}
-                        />
-                      </td>
-                      <td className="min-w-[180px]">
-                        <ModuleLines
-                          r={r}
-                          keyword={keyword}
-                          copiedModule={copiedModule}
-                          onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
-                        />
-                      </td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setStatusFilter(r.status)}
-                            className="group/dot shrink-0 rounded-full p-1 transition"
-                            style={{ color: 'var(--wb-ink-3)' }}
-                            title={`筛选「${statusMeta(r.status).label}」状态`}
-                          >
-                            <span className={`block h-2.5 w-2.5 rounded-full transition group-hover/dot:scale-125 ${statusMeta(r.status).dot}`} />
-                          </button>
-                          <Select
-                            size="sm"
-                            value={r.status}
-                            onChange={(s) => onStatusChange(r.id, s)}
-                            options={statusSelectOptions}
+                      {showProjectBranch && (
+                        <td className="min-w-[330px]">
+                          <ProjectBranchCell
+                            r={r}
+                            keyword={keyword}
+                            showProject={showProject}
+                            showBranch={showBranch}
+                            copiedBranch={copiedBranch}
+                            onCopyBranch={(b) => copyWithFeedback(b, setCopiedBranch)}
+                            onOpenOverflow={(e) => {
+                              overflowAnchorRef.current = e.currentTarget
+                              // 同步算位置，避免 useEffect 跑完前闪到 (0,0)
+                              const { top, left } = computeOverflowPos(e.currentTarget.getBoundingClientRect())
+                              setOverflow({ r, anchorTop: top, anchorLeft: left })
+                            }}
                           />
-                        </div>
-                      </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <TimeCell r={r} />
-                      </td>
-                      <td className="sticky right-0 z-10" style={{ background: 'var(--wb-surface)', boxShadow: '-4px 0 8px -4px rgba(0,0,0,.08)' }}>
+                        </td>
+                      )}
+                      {showModule && (
+                        <td className="min-w-[180px]">
+                          <ModuleLines
+                            r={r}
+                            keyword={keyword}
+                            copiedModule={copiedModule}
+                            onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
+                          />
+                        </td>
+                      )}
+                      {showStatus && (
+                        <td>
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => setStatusFilter(r.status)}
+                              className="group/dot shrink-0 rounded-full p-1 transition"
+                              style={{ color: 'var(--wb-ink-3)' }}
+                              title={`筛选「${statusMeta(r.status).label}」状态`}
+                            >
+                              <span className={`block h-2.5 w-2.5 rounded-full transition group-hover/dot:scale-125 ${statusMeta(r.status).dot}`} />
+                            </button>
+                            <Select
+                              size="sm"
+                              value={r.status}
+                              onChange={(s) => onStatusChange(r.id, s)}
+                              options={visibleStatusOptions(visibleStatuses, r.status)}
+                            />
+                          </div>
+                        </td>
+                      )}
+                      {showTime && (
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <TimeCell r={r} fields={visibleFields} />
+                        </td>
+                      )}
+                      <td
+                        className="sticky right-0 z-10"
+                        style={{ background: 'var(--wb-surface)', boxShadow: '-4px 0 8px -4px rgba(0,0,0,.08)' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div className="wb-row-actions">
                           <button
-                            onClick={() => setDrawerId(r.id)}
+                            onClick={() => onEdit(r)}
                             className="wb-icon-sm"
-                            title="查看详情"
+                            title="编辑"
                           >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                              <circle cx="12" cy="12" r="3" />
+                              <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                             </svg>
                           </button>
+                          {onAddTodo && canAddTodo(r) && (
+                            <AddTodoIconButton
+                              count={todoCounts?.get(r.id) ?? 0}
+                              onClick={() => onAddTodo(r)}
+                            />
+                          )}
                           {onClone && (
                             <button
                               onClick={() => onClone(r)}
@@ -935,6 +1016,7 @@ export function RequirementTable({
                 <RequirementCard
                   key={r.id}
                   r={r}
+                  visibleFields={visibleFields}
                   keyword={keyword}
                   copiedBranch={copiedBranch}
                   copiedModule={copiedModule}
@@ -952,6 +1034,8 @@ export function RequirementTable({
                   onOpen={() => setDrawerId(r.id)}
                   onEdit={() => onEdit(r)}
                   onClone={onClone ? () => onClone(r) : undefined}
+                  onAddTodo={onAddTodo && canAddTodo(r) ? () => onAddTodo(r) : undefined}
+                  todoCount={todoCounts?.get(r.id) ?? 0}
                   onDelete={() => setDeleteId(r.id)}
                   onFilterStatus={(s) => setStatusFilter(s)}
                 />
@@ -996,6 +1080,8 @@ export function RequirementTable({
         onClose={() => setDrawerId(null)}
         onEdit={(r) => { setDrawerId(null); onEdit(r) }}
         onStatusChange={onStatusChange}
+        onAddTodo={onAddTodo ? (r) => { setDrawerId(null); onAddTodo(r) } : undefined}
+        todoCount={drawerReq ? (todoCounts?.get(drawerReq.id) ?? 0) : 0}
       />
 
       {/* 项目溢出 popover：项目数 > 阈值时点击 (等N个) 展示全部 */}
@@ -1071,12 +1157,16 @@ export function RequirementTable({
 function ProjectBranchCell({
   r,
   keyword,
+  showProject,
+  showBranch,
   copiedBranch,
   onCopyBranch,
   onOpenOverflow,
 }: {
   r: Requirement
   keyword: string
+  showProject: boolean
+  showBranch: boolean
   copiedBranch: string | null
   onCopyBranch: (b: string) => void
   onOpenOverflow: (e: React.MouseEvent<HTMLButtonElement>) => void
@@ -1086,52 +1176,62 @@ function ProjectBranchCell({
   const shown = overflow ? names.slice(0, PROJECT_OVERFLOW_THRESHOLD) : names
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="wb-pb-line" title={names.length > 0 ? names.join('、') : undefined}>
-        <span className="wb-pb-label">项目:</span>
-        {names.length > 0 ? (
-          <>
-            <span className="wb-pb-value">
-              {shown.map((n, i) => (
-                <span key={n}>
-                  {i > 0 && <span style={{ opacity: 0.5 }}>、</span>}
-                  {highlight(n, keyword)}
-                </span>
-              ))}
-            </span>
-            {overflow && (
-              <button
-                type="button"
-                className="wb-pb-overflow"
-                onClick={onOpenOverflow}
-                title={`还有 ${names.length - shown.length} 个项目，点击查看全部`}
-              >
-                (等{names.length}个)
-              </button>
-            )}
-          </>
-        ) : (
-          <span style={{ color: 'var(--wb-ink-3)' }}>—</span>
-        )}
-      </div>
-      <div className="wb-pb-line">
-        <span className="wb-pb-label">分支:</span>
-        {r.branch ? (
-          <code
-            onClick={() => onCopyBranch(r.branch)}
-            className="wb-code"
-            style={
-              copiedBranch === r.branch
-                ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 }
-                : undefined
-            }
-            title="点击复制分支名"
-          >
-            {copiedBranch === r.branch ? '✓ 已复制' : highlight(r.branch, keyword)}
-          </code>
-        ) : (
-          <span style={{ color: 'var(--wb-ink-3)' }}>—</span>
-        )}
-      </div>
+      {showProject && (
+        <div className="wb-pb-line" title={names.length > 0 ? names.join('、') : undefined}>
+          <span className="wb-pb-label">项目:</span>
+          {names.length > 0 ? (
+            <>
+              <span className="wb-pb-value">
+                {shown.map((n, i) => (
+                  <span key={n}>
+                    {i > 0 && <span style={{ opacity: 0.5 }}>、</span>}
+                    {highlight(n, keyword)}
+                  </span>
+                ))}
+              </span>
+              {overflow && (
+                <button
+                  type="button"
+                  className="wb-pb-overflow"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenOverflow(e)
+                  }}
+                  title={`还有 ${names.length - shown.length} 个项目，点击查看全部`}
+                >
+                  (等{names.length}个)
+                </button>
+              )}
+            </>
+          ) : (
+            <span style={{ color: 'var(--wb-ink-3)' }}>—</span>
+          )}
+        </div>
+      )}
+      {showBranch && (
+        <div className="wb-pb-line">
+          <span className="wb-pb-label">分支:</span>
+          {r.branch ? (
+            <code
+              onClick={(e) => {
+                e.stopPropagation()
+                onCopyBranch(r.branch)
+              }}
+              className="wb-code branch"
+              style={
+                copiedBranch === r.branch
+                  ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 }
+                  : undefined
+              }
+              title="点击复制分支名"
+            >
+              {copiedBranch === r.branch ? '✓ 已复制' : highlight(r.branch, keyword)}
+            </code>
+          ) : (
+            <span style={{ color: 'var(--wb-ink-3)' }}>—</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1163,7 +1263,10 @@ function ModuleLines({
         return (
           <code
             key={project}
-            onClick={() => onCopyModule(lineLabel)}
+            onClick={(e) => {
+              e.stopPropagation()
+              onCopyModule(lineLabel)
+            }}
             className="wb-code module"
             style={
               isCopied
@@ -1211,6 +1314,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
  */
 function RequirementCard({
   r,
+  visibleFields,
   keyword,
   copiedBranch,
   copiedModule,
@@ -1223,10 +1327,13 @@ function RequirementCard({
   onOpen,
   onEdit,
   onClone,
+  onAddTodo,
+  todoCount,
   onDelete,
   onFilterStatus,
 }: {
   r: Requirement
+  visibleFields: VisibleFields
   keyword: string
   copiedBranch: string | null
   copiedModule: string | null
@@ -1239,10 +1346,24 @@ function RequirementCard({
   onOpen: () => void
   onEdit: () => void
   onClone?: () => void
+  /** 生成待办；undefined = 该需求状态不支持或整体未启用 */
+  onAddTodo?: () => void
+  todoCount: number
   onDelete: () => void
   onFilterStatus: (s: RequirementStatus) => void
 }) {
   const meta = statusMeta(r.status)
+  const showProject = isVisible(visibleFields, 'project')
+  const showBranch = isVisible(visibleFields, 'branch')
+  const showModule = isVisible(visibleFields, 'module')
+  const showRemark = isVisible(visibleFields, 'remark')
+  const showTime =
+    isVisible(visibleFields, 'createdAt') ||
+    isVisible(visibleFields, 'devStartTime') ||
+    isVisible(visibleFields, 'devEndTime') ||
+    isVisible(visibleFields, 'testTime') ||
+    isVisible(visibleFields, 'publishTime')
+  const showProjectBranch = showProject || showBranch
   return (
     <div
       className="space-y-2 px-4 py-3.5"
@@ -1273,6 +1394,7 @@ function RequirementCard({
           </button>
         </div>
         <div className="flex gap-1">
+          {onAddTodo && <AddTodoIconButton count={todoCount} onClick={onAddTodo} />}
           <button
             onClick={onEdit}
             className="wb-icon-sm"
@@ -1315,7 +1437,7 @@ function RequirementCard({
       >
         {highlight(r.name, keyword)}
       </div>
-      {r.remark && (
+      {showRemark && r.remark && (
         <div
           className="line-clamp-2 text-xs leading-relaxed"
           style={{ color: 'var(--wb-ink-3)' }}
@@ -1326,24 +1448,32 @@ function RequirementCard({
       <TestDueBadge r={r} />
 
       {/* 项目 / 分支 / 模块：与桌面表格一致的两行 + 多行模块布局 */}
-      <div className="flex flex-col gap-1.5 text-xs">
-        <ProjectBranchCell
-          r={r}
-          keyword={keyword}
-          copiedBranch={copiedBranch}
-          onCopyBranch={onCopyBranch}
-          onOpenOverflow={onOpenOverflow}
-        />
-        <ModuleLines
-          r={r}
-          keyword={keyword}
-          copiedModule={copiedModule}
-          onCopyModule={onCopyModule}
-        />
-      </div>
+      {(showProjectBranch || showModule) && (
+        <div className="flex flex-col gap-1.5 text-xs">
+          {showProjectBranch && (
+            <ProjectBranchCell
+              r={r}
+              keyword={keyword}
+              showProject={showProject}
+              showBranch={showBranch}
+              copiedBranch={copiedBranch}
+              onCopyBranch={onCopyBranch}
+              onOpenOverflow={onOpenOverflow}
+            />
+          )}
+          {showModule && (
+            <ModuleLines
+              r={r}
+              keyword={keyword}
+              copiedModule={copiedModule}
+              onCopyModule={onCopyModule}
+            />
+          )}
+        </div>
+      )}
 
       {/* 时间 */}
-      <TimeCell r={r} wrap />
+      {showTime && <TimeCell r={r} fields={visibleFields} wrap />}
     </div>
   )
 }

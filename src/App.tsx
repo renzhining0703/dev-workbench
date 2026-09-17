@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import type { Requirement, RequirementStatus } from './types'
+import type { Requirement, RequirementStatus, TodoPriority } from './types'
 import { StoreProvider, useStore, type PushTrigger } from './store/StoreContext'
 import { RequirementFormModal, type RequirementDraft } from './components/RequirementForm'
 import { RequirementTable } from './components/RequirementTable'
@@ -21,12 +21,14 @@ import { EfficiencyView } from './components/EfficiencyView'
 import { PreferencesModal } from './components/PreferencesModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
 import { PushModal } from './components/PushModal'
+import { AddTodoModal } from './components/AddTodoModal'
 import { CommandPalette, type PaletteTab } from './components/CommandPalette'
 import { AuthPage } from './components/AuthPage'
 import { UserMenu } from './components/UserMenu'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthProvider, useAuth } from './store/AuthContext'
 import { findAutoArchiveTargets } from './lib/archive'
+import { countTodosByRequirement } from './lib/todos'
 import { parseImportData } from './lib/migrate'
 import { hasProjectInitFlag, markProjectInit } from './lib/storage'
 import { seedProjects } from './data/seedProjects'
@@ -178,6 +180,8 @@ function AppInner({
   const [pendingTodoDate, setPendingTodoDate] = useState<string | null>(null)
   // 待办关联需求跳转：待办 chip 点击 → 切到需求列表并打开对应抽屉
   const [pendingReqId, setPendingReqId] = useState<string | null>(null)
+  // 需求列表「+ 待办」：非空时打开添加待办弹框
+  const [addTodoFor, setAddTodoFor] = useState<Requirement | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   // 防止组件 remount 时重复跑自动归档
   const archiveRunRef = useRef(false)
@@ -355,6 +359,24 @@ function AppInner({
     setPendingReqId(reqId)
   }, [])
 
+  /** requirementId → 已有关联待办条数（列表按钮角标）；一次遍历，避免每行 filter 全量 */
+  const todoCounts = useMemo(() => countTodosByRequirement(store.todos), [store.todos])
+
+  /** 需求列表「+ 待办」提交：写入待办并关联需求 */
+  const handleAddTodoSubmit = useCallback(
+    ({ content, date, priority }: { content: string; date: string; priority: TodoPriority }) => {
+      if (!addTodoFor) return
+      store.addTodo(content, date, { requirementId: addTodoFor.id, priority })
+      setAddTodoFor(null)
+      showNotifyToast({
+        tone: 'ok',
+        title: '待办已添加',
+        desc: `${date} · ${content}`,
+      })
+    },
+    [addTodoFor, store, showNotifyToast],
+  )
+
   /** 命令面板：导航到指定 Tab */
   const handlePaletteNavigate = useCallback((t: PaletteTab) => {
     setTab(t)
@@ -419,6 +441,14 @@ function AppInner({
       <ShortcutsModal
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
+      />
+
+      <AddTodoModal
+        open={!!addTodoFor}
+        requirement={addTodoFor}
+        todos={store.todos}
+        onClose={() => setAddTodoFor(null)}
+        onSubmit={handleAddTodoSubmit}
       />
 
       {archiveToast && (
@@ -778,6 +808,8 @@ function AppInner({
                 searchInputRef={searchInputRef}
                 externalOpenId={pendingReqId}
                 onExternalOpened={() => setPendingReqId(null)}
+                onAddTodo={setAddTodoFor}
+                todoCounts={todoCounts}
               />
             ) : (
               <RequirementKanban
@@ -785,6 +817,8 @@ function AppInner({
                 onEdit={(r) => { setEditing(r); setFormOpen(true) }}
                 onStatusChange={handleStatusChange}
                 searchInputRef={searchInputRef}
+                onAddTodo={setAddTodoFor}
+                todoCounts={todoCounts}
               />
             )}
           </>

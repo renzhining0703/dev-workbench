@@ -134,4 +134,8 @@ const DOT_HEX: Record<RequirementStatus, string> = {
   paused: '#f97316', // orange-500
   published: '#10b981', // emerald-500
   archived: '#94a3b8', // slate-400
+  notStarted: '#06b6d4', // cyan-500
+  inProgress: '#6366f1', // indigo-500
+  toConfirm: '#f43f5e', // rose-500
+  done: '#14b8a6', // teal-500
 }

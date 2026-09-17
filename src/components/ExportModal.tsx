@@ -6,7 +6,7 @@ import { copyToClipboard, exportCsv, fmtDate } from '../lib/utils'
 import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
 import { Modal } from './ui'
 
-/** 按"开发开始时间"落在指定月份筛选 */
+/** 按"开始时间"落在指定月份筛选 */
 function filterByDevMonth(requirements: Requirement[], month: string): Requirement[] {
   return requirements.filter((r) => {
     if (!r.devStartTime) return false
@@ -31,10 +31,10 @@ export function ExportModal({
   const list = useMemo(() => filterByDevMonth(requirements, month), [requirements, month])
   const monthLabel = format(parse(month, 'yyyy-MM', new Date()), 'yyyy年M月')
 
-  /** 复制当月需求清单：表头 + 每行「需求名称\t开发开始时间」（tab 分隔，可直接粘 Excel） */
+  /** 复制当月需求清单：表头 + 每行「需求名称\t开始时间」（tab 分隔，可直接粘 Excel） */
   function copyList() {
     if (list.length === 0) return
-    const lines = ['需求名称\t开发开始时间', ...list.map((r) => `${r.name}\t${fmtDate(r.devStartTime)}`)]
+    const lines = ['需求名称\t开始时间', ...list.map((r) => `${r.name}\t${fmtDate(r.devStartTime)}`)]
     const done = () => {
       setCopied(true)
       if (copyTimer.current) window.clearTimeout(copyTimer.current)
@@ -55,8 +55,8 @@ export function ExportModal({
         '发布模块',
         '状态',
         '创建时间',
-        '开发开始时间',
-        '开发结束时间',
+        '开始时间',
+        '完成时间',
         '提测时间',
         '上线时间',
         '备注',
@@ -80,7 +80,7 @@ export function ExportModal({
   return (
     <Modal open={open} onClose={onClose} title="导出需求清单" width="max-w-lg">
       <p className="mb-4 text-sm" style={{ color: 'var(--wb-ink-2)' }}>
-        按「开发开始时间」所在月份导出，生成 CSV 文件，可用 Excel / WPS 直接打开。
+        按「开始时间」所在月份导出，生成 CSV 文件，可用 Excel / WPS 直接打开。
       </p>
 
       <div className="mb-1 flex items-center gap-2">

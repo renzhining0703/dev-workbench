@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Project, Requirement, TodoItem, TodoPriority } from '../types'
+import type { Project, Requirement, RequirementStatus, TodoItem, TodoPriority } from '../types'
 import { normalizeRequirement } from '../lib/projects'
 import {
   loadProjects,
@@ -26,6 +26,17 @@ import { getArchiveMonths, setArchiveMonths as persistArchiveMonths } from '../l
 import type { MigratedRequirement } from '../lib/migrate'
 import { mergeByUpdatedAt } from '../lib/merge'
 import { active, gcTombstones } from '../lib/tombstone'
+import {
+  loadVisibleFields,
+  saveVisibleFields,
+  type RequirementFieldKey,
+  type VisibleFields,
+} from '../lib/fields'
+import {
+  loadVisibleStatuses,
+  saveVisibleStatuses,
+  type VisibleStatuses,
+} from '../lib/statuses'
 
 /** 同步触发器：由外部（App 层 startSync）注入；mutation 后调用 */
 export type PushTrigger = () => void
@@ -49,7 +60,15 @@ interface Store {
   }
   /** 自动归档月份（同步通道） */
   archiveMonths: number
-  addRequirement: (draft: Omit<Requirement, 'id' | 'createdAt' | 'updatedAt'>) => void
+  /** 需求字段显隐配置（本地偏好，不云同步） */
+  visibleFields: VisibleFields
+  /** 切换某个需求字段的显隐（本地持久化，不云同步） */
+  setVisibleField: (key: RequirementFieldKey, visible: boolean) => void
+  /** 需求状态显隐配置（本地偏好，不云同步） */
+  visibleStatuses: VisibleStatuses
+  /** 切换某个需求状态的显隐（本地持久化，不云同步） */
+  setVisibleStatus: (key: RequirementStatus, visible: boolean) => void
+  addRequirement: (draft: Omit<Requirement, 'id' | 'updatedAt'>) => void
   updateRequirement: (draft: Requirement) => void
   removeRequirement: (id: string) => void
   /** 恢复已删除的需求（保留原始 id/createdAt，用于撤销删除） */
@@ -128,6 +147,12 @@ export function StoreProvider({
   const [archiveMonths, setArchiveMonthsState] = useState<number>(() =>
     getArchiveMonths(),
   )
+  const [visibleFields, setVisibleFieldsState] = useState<VisibleFields>(() =>
+    loadVisibleFields(),
+  )
+  const [visibleStatuses, setVisibleStatusesState] = useState<VisibleStatuses>(() =>
+    loadVisibleStatuses(),
+  )
 
   const trigger = pushTrigger ?? noopPush
   const triggerRef = useRef(trigger)
@@ -143,18 +168,23 @@ export function StoreProvider({
       if (e.key === 'dev-workbench:auto-archive-months') {
         setArchiveMonthsState(getArchiveMonths())
       }
+      if (e.key === 'dev-workbench:requirement-fields') {
+        setVisibleFieldsState(loadVisibleFields())
+      }
+      if (e.key === 'dev-workbench:requirement-statuses') {
+        setVisibleStatusesState(loadVisibleStatuses())
+      }
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
   const addRequirement = useCallback(
-    (draft: Omit<Requirement, 'id' | 'createdAt' | 'updatedAt'>) => {
+    (draft: Omit<Requirement, 'id' | 'updatedAt'>) => {
       setRequirements((prev) => {
         const item: Requirement = {
           ...draft,
           id: uid(),
-          createdAt: nowISO(),
           updatedAt: nowISO(),
         }
         const next = [item, ...prev]
@@ -453,6 +483,24 @@ export function StoreProvider({
     triggerRef.current()
   }, [])
 
+  /** 切换某个需求字段的显隐（本地偏好，仅本设备，不云同步） */
+  const setVisibleField = useCallback((key: RequirementFieldKey, visible: boolean) => {
+    setVisibleFieldsState((prev) => {
+      const next = { ...prev, [key]: visible }
+      saveVisibleFields(next)
+      return next
+    })
+  }, [])
+
+  /** 切换某个需求状态的显隐（本地偏好，仅本设备，不云同步） */
+  const setVisibleStatus = useCallback((key: RequirementStatus, visible: boolean) => {
+    setVisibleStatusesState((prev) => {
+      const next = { ...prev, [key]: visible }
+      saveVisibleStatuses(next)
+      return next
+    })
+  }, [])
+
   /**
    * 用服务端合并结果覆盖本地（由 sync 层调用）
    * 改用 LWW merge（不再 wholesale replace）：
@@ -524,6 +572,10 @@ export function StoreProvider({
       projects: active(projects),
       getSyncData,
       archiveMonths,
+      visibleFields,
+      setVisibleField,
+      visibleStatuses,
+      setVisibleStatus,
       addRequirement,
       updateRequirement,
       removeRequirement,
@@ -544,6 +596,7 @@ export function StoreProvider({
     }),
     [
       requirements, todos, projects, archiveMonths, getSyncData,
+      visibleFields, setVisibleField, visibleStatuses, setVisibleStatus,
       addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements,
       addTodo, toggleTodo, updateTodo, removeTodo,
       addProject, updateProject, removeProject,

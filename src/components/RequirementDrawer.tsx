@@ -4,20 +4,27 @@ import type { Requirement, RequirementStatus } from '../types'
 import { STATUS_FLOW, statusMeta } from '../types'
 import { fmtDate, isDateToday, copyToClipboard } from '../lib/utils'
 import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
-import { Select, statusSelectOptions } from './Select'
+import { isVisible, type TimeFieldKey } from '../lib/fields'
+import { isStatusVisible, visibleStatusOptions } from '../lib/statuses'
+import { useStore } from '../store/StoreContext'
+import { Select } from './Select'
 
 interface Props {
   requirement: Requirement | null
   onClose: () => void
   onEdit: (r: Requirement) => void
   onStatusChange: (id: string, status: RequirementStatus) => void
+  /** 生成待办：仅「待开发 / 开发中」的需求展示入口；未传则隐藏 */
+  onAddTodo?: (r: Requirement) => void
+  /** 已有关联待办条数（按钮文案用） */
+  todoCount?: number
 }
 
 /** 时间线展示顺序 */
-const TIMELINE: { key: keyof Requirement; label: string }[] = [
+const TIMELINE: { key: TimeFieldKey; label: string }[] = [
   { key: 'createdAt', label: '创建时间' },
-  { key: 'devStartTime', label: '开发开始' },
-  { key: 'devEndTime', label: '开发结束' },
+  { key: 'devStartTime', label: '开始时间' },
+  { key: 'devEndTime', label: '完成时间' },
   { key: 'testTime', label: '提测时间' },
   { key: 'publishTime', label: '上线时间' },
 ]
@@ -31,8 +38,12 @@ function FieldLabel({ children }: { children: ReactNode }) {
   )
 }
 
-export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange }: Props) {
+export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange, onAddTodo, todoCount = 0 }: Props) {
+  const { visibleFields, visibleStatuses } = useStore()
   const [copiedField, setCopiedField] = useState<string | null>(null)
+
+  // 时间线只保留可见时间字段（全部隐藏时整个区块消失）
+  const visibleTimeline = TIMELINE.filter(({ key }) => isVisible(visibleFields, key))
 
   useEffect(() => {
     if (!requirement) return
@@ -44,6 +55,8 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
   if (!requirement) return null
   const r = requirement
   const meta = statusMeta(r.status)
+  // 状态流转只展示可见状态；当前状态即使被隐藏也保底展示（保持 active 标记不丢）
+  const visibleFlow = STATUS_FLOW.filter((s) => isStatusVisible(visibleStatuses, s) || s === r.status)
 
   function copyField(field: string, text: string) {
     if (!text) return
@@ -83,9 +96,11 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
                   <span className="dot" />
                   {meta.label}
                 </span>
-                <span className="text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-                  创建于 {fmtDate(r.createdAt)}
-                </span>
+                {isVisible(visibleFields, 'createdAt') && (
+                  <span className="text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+                    创建于 {fmtDate(r.createdAt)}
+                  </span>
+                )}
               </div>
             </div>
             <button
@@ -104,35 +119,46 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
         {/* 内容 */}
         <div className="space-y-5 px-5 py-5">
           {/* 状态切换 */}
-          <div>
-            <FieldLabel>状态</FieldLabel>
-            <Select
-              value={r.status}
-              onChange={(s) => onStatusChange(r.id, s)}
-              options={statusSelectOptions}
-            />
-          </div>
+          {isVisible(visibleFields, 'status') && (
+            <div>
+              <FieldLabel>状态</FieldLabel>
+              <Select
+                value={r.status}
+                onChange={(s) => onStatusChange(r.id, s)}
+                options={visibleStatusOptions(visibleStatuses, r.status)}
+              />
+            </div>
+          )}
 
           {/* 关键字段 */}
-          <div className="space-y-3">
-            <DrawerField label="所属项目" value={requirementProjectDisplay(r)} />
-            <DrawerField
-              label="代码分支"
-              value={r.branch}
-              copyable
-              copied={copiedField === 'branch'}
-              onCopy={() => copyField('branch', r.branch)}
-            />
-            <DrawerField
-              label="发布模块"
-              value={requirementModuleDisplay(r)}
-              copyable
-              copied={copiedField === 'module'}
-              onCopy={() => copyField('module', requirementModuleDisplay(r))}
-            />
-          </div>
+          {(isVisible(visibleFields, 'project') || isVisible(visibleFields, 'branch') || isVisible(visibleFields, 'module')) && (
+            <div className="space-y-3">
+              {isVisible(visibleFields, 'project') && (
+                <DrawerField label="所属项目" value={requirementProjectDisplay(r)} />
+              )}
+              {isVisible(visibleFields, 'branch') && (
+                <DrawerField
+                  label="代码分支"
+                  value={r.branch}
+                  copyable
+                  copied={copiedField === 'branch'}
+                  onCopy={() => copyField('branch', r.branch)}
+                />
+              )}
+              {isVisible(visibleFields, 'module') && (
+                <DrawerField
+                  label="发布模块"
+                  value={requirementModuleDisplay(r)}
+                  copyable
+                  copied={copiedField === 'module'}
+                  onCopy={() => copyField('module', requirementModuleDisplay(r))}
+                />
+              )}
+            </div>
+          )}
 
           {/* 时间线 */}
+          {visibleTimeline.length > 0 && (
           <div>
             <FieldLabel>时间线</FieldLabel>
             <div className="relative space-y-3 pl-4">
@@ -140,7 +166,7 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
                 className="absolute bottom-2 left-[5px] top-2 w-px"
                 style={{ background: 'var(--wb-line)' }}
               />
-              {TIMELINE.map(({ key, label }) => {
+              {visibleTimeline.map(({ key, label }) => {
                 const iso = r[key] as string | null
                 const date = fmtDate(iso)
                 const today = isDateToday(iso)
@@ -178,9 +204,10 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
               })}
             </div>
           </div>
+          )}
 
           {/* 备注 */}
-          {r.remark && (
+          {isVisible(visibleFields, 'remark') && r.remark && (
             <div>
               <FieldLabel>备注</FieldLabel>
               <div
@@ -196,9 +223,9 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
           <div>
             <FieldLabel>状态流转</FieldLabel>
             <div className="flex flex-wrap items-center gap-1">
-              {STATUS_FLOW.map((s, i) => {
+              {visibleFlow.map((s, i) => {
                 const active = s === r.status
-                const passed = STATUS_FLOW.indexOf(r.status) > i
+                const passed = visibleFlow.indexOf(r.status) > i
                 return (
                   <div key={s} className="flex items-center gap-1">
                     <span
@@ -213,7 +240,7 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
                     >
                       {statusMeta(s).label}
                     </span>
-                    {i < STATUS_FLOW.length - 1 && (
+                    {i < visibleFlow.length - 1 && (
                       <span style={{ color: 'var(--wb-ink-3)', opacity: 0.6 }}>→</span>
                     )}
                   </div>
@@ -238,6 +265,20 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
             </svg>
             编辑需求
           </button>
+          {onAddTodo && (
+            <button
+              className="wb-btn-ghost mt-2 w-full"
+              style={{ justifyContent: 'center' }}
+              onClick={() => onAddTodo(r)}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8" />
+                <path d="M16 2v4M8 2v4M3 10h18" />
+                <path d="M18 15v6M15 18h6" />
+              </svg>
+              添加待办{todoCount > 0 ? `（已有 ${todoCount} 条）` : ''}
+            </button>
+          )}
         </div>
       </div>
     </>

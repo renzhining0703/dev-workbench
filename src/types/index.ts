@@ -7,6 +7,10 @@ export type RequirementStatus =
   | 'paused' // 暂停
   | 'published' // 已上线
   | 'archived' // 已归档
+  | 'notStarted' // 未开始
+  | 'inProgress' // 进行中
+  | 'toConfirm' // 待确认
+  | 'done' // 已完成
 
 /** 需求-项目关联：一个需求可涉及多个项目，每个项目各自的发布模块 */
 export interface RequirementProject {
@@ -38,9 +42,9 @@ export interface Requirement {
   status: RequirementStatus
   /** 创建时间 */
   createdAt: string
-  /** 开发开始时间 */
+  /** 开始时间 */
   devStartTime: string | null
-  /** 开发结束时间 */
+  /** 完成时间 */
   devEndTime: string | null
   /** 提测时间 */
   testTime: string | null
@@ -103,6 +107,10 @@ export const STATUS_META: Record<
   paused: { label: '暂停', color: 'text-orange-600 dark:text-orange-400', dot: 'bg-orange-500' },
   published: { label: '已上线', color: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
   archived: { label: '已归档', color: 'text-slate-400 dark:text-slate-500', dot: 'bg-slate-400' },
+  notStarted: { label: '未开始', color: 'text-cyan-600 dark:text-cyan-400', dot: 'bg-cyan-500' },
+  inProgress: { label: '进行中', color: 'text-indigo-600 dark:text-indigo-400', dot: 'bg-indigo-500' },
+  toConfirm: { label: '待确认', color: 'text-rose-600 dark:text-rose-400', dot: 'bg-rose-500' },
+  done: { label: '已完成', color: 'text-teal-600 dark:text-teal-400', dot: 'bg-teal-500' },
 }
 
 /**
@@ -122,4 +130,8 @@ export const STATUS_FLOW: RequirementStatus[] = [
   'paused',
   'published',
   'archived',
+  'notStarted',
+  'inProgress',
+  'toConfirm',
+  'done',
 ]

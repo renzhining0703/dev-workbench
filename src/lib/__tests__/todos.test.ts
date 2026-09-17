@@ -9,6 +9,11 @@ import {
   buildTodoSummary,
   collectTodoReqIds,
   PRIORITY_META,
+  canAddTodo,
+  linkedTodosOf,
+  countTodosByRequirement,
+  defaultTodoContent,
+  TODO_ELIGIBLE_STATUSES,
 } from '../todos'
 import { toDateStr } from '../utils'
 import type { TodoItem } from '../../types'
@@ -146,5 +151,110 @@ describe('collectTodoReqIds', () => {
       makeTodo({ id: 'linked', date: yesterday, requirementId: 'r1' }),
     ]
     expect(collectTodoReqIds(todos)).toEqual(new Set(['r1']))
+  })
+})
+
+// ====== 需求列表「+ 待办」入口 ======
+
+describe('canAddTodo', () => {
+  it('TODO_ELIGIBLE_STATUSES 只包含 pending / developing', () => {
+    expect([...TODO_ELIGIBLE_STATUSES]).toEqual(['pending', 'developing'])
+  })
+
+  it('pending / developing 允许', () => {
+    expect(canAddTodo({ status: 'pending' })).toBe(true)
+    expect(canAddTodo({ status: 'developing' })).toBe(true)
+  })
+
+  it('testing 及之后状态不允许', () => {
+    expect(canAddTodo({ status: 'testing' })).toBe(false)
+    expect(canAddTodo({ status: 'ready' })).toBe(false)
+    expect(canAddTodo({ status: 'published' })).toBe(false)
+  })
+
+  it('paused / archived 不允许', () => {
+    expect(canAddTodo({ status: 'paused' })).toBe(false)
+    expect(canAddTodo({ status: 'archived' })).toBe(false)
+  })
+})
+
+describe('linkedTodosOf', () => {
+  it('按日期升序返回该需求的所有待办', () => {
+    const todos = [
+      makeTodo({ id: 'a', date: '2026-02-01', requirementId: 'r1' }),
+      makeTodo({ id: 'b', date: '2026-01-15', requirementId: 'r1' }),
+      makeTodo({ id: 'c', date: '2026-01-20', requirementId: 'r1' }),
+      makeTodo({ id: 'd', date: '2026-01-20', requirementId: 'r2' }), // 其它需求
+    ]
+    expect(linkedTodosOf(todos, 'r1').map((t) => t.id)).toEqual(['b', 'c', 'a'])
+  })
+
+  it('不传 requirementId 的待办不出现在结果里', () => {
+    const todos = [
+      makeTodo({ id: 'plain' }),
+      makeTodo({ id: 'linked', requirementId: 'r1' }),
+    ]
+    expect(linkedTodosOf(todos, 'r1').map((t) => t.id)).toEqual(['linked'])
+  })
+
+  it('空匹配返回空数组', () => {
+    expect(linkedTodosOf([], 'r1')).toEqual([])
+  })
+
+  it('同一天多条不会丢（弹框靠别的机制去重——这里只负责列出）', () => {
+    const todos = [
+      makeTodo({ id: 'a', date: today, requirementId: 'r1' }),
+      makeTodo({ id: 'b', date: today, requirementId: 'r1' }),
+    ]
+    expect(linkedTodosOf(todos, 'r1').map((t) => t.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('countTodosByRequirement', () => {
+  it('单需求多条正确计数', () => {
+    const todos = [
+      makeTodo({ id: 'a', requirementId: 'r1' }),
+      makeTodo({ id: 'b', requirementId: 'r1' }),
+      makeTodo({ id: 'c', requirementId: 'r1' }),
+    ]
+    const m = countTodosByRequirement(todos)
+    expect(m.get('r1')).toBe(3)
+  })
+
+  it('多需求分别计数', () => {
+    const todos = [
+      makeTodo({ id: 'a', requirementId: 'r1' }),
+      makeTodo({ id: 'b', requirementId: 'r2' }),
+      makeTodo({ id: 'c', requirementId: 'r1' }),
+      makeTodo({ id: 'd', requirementId: 'r3' }),
+    ]
+    const m = countTodosByRequirement(todos)
+    expect(m.get('r1')).toBe(2)
+    expect(m.get('r2')).toBe(1)
+    expect(m.get('r3')).toBe(1)
+  })
+
+  it('无 requirementId 的待办不计入任何 key', () => {
+    const todos = [makeTodo({ id: 'plain' }), makeTodo({ id: 'linked', requirementId: 'r1' })]
+    const m = countTodosByRequirement(todos)
+    expect(m.get('plain')).toBeUndefined()
+    expect(m.get('r1')).toBe(1)
+    expect(m.size).toBe(1)
+  })
+
+  it('空列表返回空 Map（不返回 undefined）', () => {
+    const m = countTodosByRequirement([])
+    expect(m).toBeInstanceOf(Map)
+    expect(m.size).toBe(0)
+  })
+})
+
+describe('defaultTodoContent', () => {
+  it('格式：开发：{需求名}', () => {
+    expect(defaultTodoContent({ name: '首页改版' })).toBe('开发：首页改版')
+  })
+
+  it('空名也正常返回', () => {
+    expect(defaultTodoContent({ name: '' })).toBe('开发：')
   })
 })

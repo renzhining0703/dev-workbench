@@ -4,24 +4,43 @@ import type { Requirement, RequirementStatus } from '../types'
 import { statusMeta } from '../types'
 import { fmtDateShort } from '../lib/utils'
 import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
+import { isVisible, type VisibleFields, type TimeFieldKey } from '../lib/fields'
+import { isStatusVisible } from '../lib/statuses'
+import { useStore } from '../store/StoreContext'
+import { AddTodoIconButton } from './AddTodoModal'
+import { canAddTodo } from '../lib/todos'
 
 /**
- * 看板包含的 4 列：只展示工作流高频状态
- * paused / published / archived 不进看板（用表格 Tab 专门查看）
+ * 看板包含的 8 列：活跃工作流状态（4 开发 + 4 通用）
+ * paused / published / archived 不进看板（用表格 Tab 专门查看）；
+ * 再按显隐配置进一步过滤（见 visibleColumns）。
  */
-const KANBAN_COLUMNS: RequirementStatus[] = ['pending', 'developing', 'testing', 'ready']
+const KANBAN_COLUMNS: RequirementStatus[] = [
+  'pending',
+  'developing',
+  'testing',
+  'ready',
+  'notStarted',
+  'inProgress',
+  'toConfirm',
+  'done',
+]
 
 interface Props {
   requirements: Requirement[]
   onEdit: (r: Requirement) => void
   onStatusChange: (id: string, status: RequirementStatus) => void
+  /** 生成待办：仅「待开发 / 开发中」的需求展示入口；未传则整体隐藏 */
+  onAddTodo?: (r: Requirement) => void
+  /** requirementId → 已有关联待办条数（按钮角标） */
+  todoCounts?: Map<string, number>
   /** 搜索框 ref，供全局快捷键 `/` 聚焦 */
   searchInputRef?: React.Ref<HTMLInputElement>
 }
 
-/** 卡片底部显示的最近一个时间点：上线 > 提测 > 结束 > 开发 > 创建 */
-function recentTimeText(r: Requirement): string {
-  const order: (keyof Requirement)[] = [
+/** 卡片底部显示的最近一个时间点：上线 > 提测 > 结束 > 开发 > 创建（跳过不可见字段） */
+function recentTimeText(r: Requirement, fields: VisibleFields): string {
+  const order: TimeFieldKey[] = [
     'publishTime',
     'testTime',
     'devEndTime',
@@ -29,6 +48,7 @@ function recentTimeText(r: Requirement): string {
     'createdAt',
   ]
   for (const k of order) {
+    if (!isVisible(fields, k)) continue
     const v = r[k] as string | null
     if (v) return fmtDateShort(v)
   }
@@ -39,23 +59,32 @@ export function RequirementKanban({
   requirements,
   onEdit,
   onStatusChange,
+  onAddTodo,
+  todoCounts,
   searchInputRef,
 }: Props) {
+  const { visibleFields, visibleStatuses } = useStore()
   const [keyword, setKeyword] = useState('')
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverCol, setDragOverCol] = useState<RequirementStatus | null>(null)
 
-  // 只看看板内的 4 种状态的需求
+  // 看板列 = 8 个活跃状态再按显隐配置过滤
+  const visibleColumns = useMemo(
+    () => KANBAN_COLUMNS.filter((s) => isStatusVisible(visibleStatuses, s)),
+    [visibleStatuses],
+  )
+
+  // 只看看板内（可见列）状态的需求
   const inKanban = useMemo(
-    () => requirements.filter((r) => KANBAN_COLUMNS.includes(r.status)),
-    [requirements],
+    () => requirements.filter((r) => visibleColumns.includes(r.status)),
+    [requirements, visibleColumns],
   )
 
   // 按状态分组 + 关键词过滤 + 按更新时间倒序
   const columns = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
     const map = new Map<RequirementStatus, Requirement[]>()
-    for (const col of KANBAN_COLUMNS) map.set(col, [])
+    for (const col of visibleColumns) map.set(col, [])
     for (const r of inKanban) {
       if (kw) {
         const haystack = [
@@ -71,13 +100,13 @@ export function RequirementKanban({
       }
       map.get(r.status)!.push(r)
     }
-    for (const col of KANBAN_COLUMNS) {
+    for (const col of visibleColumns) {
       map
         .get(col)!
         .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
     }
     return map
-  }, [inKanban, keyword])
+  }, [inKanban, keyword, visibleColumns])
 
   // ====== HTML5 拖拽事件 ======
   const onCardDragStart = (e: DragEvent<HTMLDivElement>, id: string) => {
@@ -118,10 +147,10 @@ export function RequirementKanban({
     return (
       <div className="rounded-2xl border border-dashed border-[var(--wb-line-2)] bg-[var(--wb-surface)] p-12 text-center">
         <p className="text-sm" style={{ color: 'var(--wb-ink-2)' }}>
-          当前没有「待开发 / 开发中 / 测试中 / 待上线」状态的需求
+          当前没有看板状态的需求
         </p>
         <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-          其他状态（暂停 / 已上线 / 已归档）请切换到「表格」视图查看
+          其他状态（暂停 / 已上线 / 已归档）及在偏好里隐藏的状态请切换到「表格」视图查看
         </p>
       </div>
     )
@@ -161,7 +190,7 @@ export function RequirementKanban({
 
       {/* 4 列横排：移动端 1 列 → sm 2 列 → lg 4 列 */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {KANBAN_COLUMNS.map((col) => {
+        {visibleColumns.map((col) => {
           const list = columns.get(col) ?? []
           const meta = statusMeta(col)
           const isOver = dragOverCol === col
@@ -214,10 +243,13 @@ export function RequirementKanban({
                     <KanbanCard
                       key={r.id}
                       r={r}
+                      fields={visibleFields}
                       dragging={draggingId === r.id}
                       onDragStart={(e) => onCardDragStart(e, r.id)}
                       onDragEnd={onCardDragEnd}
                       onClick={() => onEdit(r)}
+                      onAddTodo={onAddTodo && canAddTodo(r) ? () => onAddTodo(r) : undefined}
+                      todoCount={todoCounts?.get(r.id) ?? 0}
                     />
                   ))
                 )}
@@ -232,17 +264,32 @@ export function RequirementKanban({
 
 function KanbanCard({
   r,
+  fields,
   dragging,
   onDragStart,
   onDragEnd,
   onClick,
+  onAddTodo,
+  todoCount,
 }: {
   r: Requirement
+  fields: VisibleFields
   dragging: boolean
   onDragStart: (e: DragEvent<HTMLDivElement>) => void
   onDragEnd: () => void
   onClick: () => void
+  /** 生成待办；undefined = 该需求状态不支持或整体未启用 */
+  onAddTodo?: () => void
+  todoCount: number
 }) {
+  const showProject = isVisible(fields, 'project')
+  const showBranch = isVisible(fields, 'branch')
+  const showTime =
+    isVisible(fields, 'createdAt') ||
+    isVisible(fields, 'devStartTime') ||
+    isVisible(fields, 'devEndTime') ||
+    isVisible(fields, 'testTime') ||
+    isVisible(fields, 'publishTime')
   return (
     <div
       draggable
@@ -257,7 +304,7 @@ function KanbanCard({
       <div className="line-clamp-2 text-sm font-medium leading-snug" style={{ color: 'var(--wb-ink)' }}>
         {r.name}
       </div>
-      {requirementProjectDisplay(r) && (
+      {showProject && requirementProjectDisplay(r) && (
         <div
           className="mt-1.5 truncate text-[11px]"
           style={{ color: 'var(--wb-ink-2)' }}
@@ -266,7 +313,7 @@ function KanbanCard({
           {requirementProjectDisplay(r)}
         </div>
       )}
-      {r.branch && (
+      {showBranch && r.branch && (
         <code
           className="mt-1 inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[10px]"
           style={{ background: 'var(--wb-surface-2)', color: 'var(--wb-ink-2)' }}
@@ -275,15 +322,27 @@ function KanbanCard({
         </code>
       )}
       <div className="mt-2 flex items-center justify-between gap-1.5 text-[10px]" style={{ color: 'var(--wb-ink-3)' }}>
-        <span>{recentTimeText(r)}</span>
-        {r.status === 'ready' && r.publishTime && (
-          <span
-            className="rounded px-1.5 py-0.5 font-medium"
-            style={{ background: 'var(--wb-success-soft)', color: 'var(--wb-success)' }}
-          >
-            今日上线
-          </span>
-        )}
+        {showTime ? <span>{recentTimeText(r, fields)}</span> : <span />}
+        <div className="flex items-center gap-1.5">
+          {r.status === 'ready' && isVisible(fields, 'publishTime') && r.publishTime && (
+            <span
+              className="rounded px-1.5 py-0.5 font-medium"
+              style={{ background: 'var(--wb-success-soft)', color: 'var(--wb-success)' }}
+            >
+              今日上线
+            </span>
+          )}
+          {onAddTodo && (
+            <AddTodoIconButton
+              count={todoCount}
+              onClick={(e) => {
+                // 卡片整体 onClick 是「打开编辑」，这里不能冒泡上去
+                e.stopPropagation()
+                onAddTodo()
+              }}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
