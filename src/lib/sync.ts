@@ -15,6 +15,7 @@
  */
 import type { Project, Requirement, TodoItem } from '../types'
 import { SYNC_API, SYNC_ENABLED } from './syncConfig'
+import type { UiPrefs } from './uiPrefs'
 import { emitUnauthorized } from '../store/AuthContext'
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'error'
@@ -30,20 +31,26 @@ export interface SyncState {
   user: { username: string } | null
 }
 
+/** settings 通道：autoArchiveMonths 为既有字段，uiPrefs 为 UI 偏好打包（旧服务端可透传） */
+export interface SyncSettings {
+  autoArchiveMonths: number
+  uiPrefs?: UiPrefs
+}
+
 export interface RemoteSnapshot {
   /** 服务端权威时间戳（响应里有，客户端推送时不需要） */
   serverTs: string
   requirements: Requirement[]
   todos: TodoItem[]
   projects: Project[]
-  settings: { autoArchiveMonths: number }
+  settings: SyncSettings
 }
 
 export interface RemoteSnapshotInput {
   requirements: Requirement[]
   todos: TodoItem[]
   projects: Project[]
-  settings: { autoArchiveMonths: number }
+  settings: SyncSettings
   clientTs?: string
 }
 
@@ -52,7 +59,7 @@ interface Adapter {
     requirements: Requirement[]
     todos: TodoItem[]
     projects: Project[]
-    settings: { autoArchiveMonths: number }
+    settings: SyncSettings
   }
   applyRemote: (snap: RemoteSnapshot) => void
 }

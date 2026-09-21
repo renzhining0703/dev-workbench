@@ -13,17 +13,23 @@ import {
   last6MonthsPublished,
   buildWeeklyReport,
   buildMonthlyReport,
+  resolveStatusView,
 } from '../lib/stats'
 import { copyToClipboard } from '../lib/utils'
+import { useStore } from '../store/StoreContext'
 import { DonutChart } from './DonutChart'
 import { BarChart } from './BarChart'
 
 export function StatsView({ requirements }: { requirements: Requirement[] }) {
+  const { visibleStatuses } = useStore()
   const [copiedKey, setCopiedKey] = useState<'week' | 'month' | null>(null)
   const copyTimer = useRef<number | null>(null)
 
   const year = currentYear()
   const month = currentMonth()
+
+  /** 统计口径跟随状态显隐（使用视角）：产品视角下完成 = done，开发口径完成 = published */
+  const view = useMemo(() => resolveStatusView(visibleStatuses), [visibleStatuses])
 
   const yearItems = useMemo(
     () => filterByYear(requirements, year),
@@ -34,29 +40,30 @@ export function StatsView({ requirements }: { requirements: Requirement[] }) {
     [requirements, month],
   )
 
-  const counts = useMemo(() => statusCounts(requirements), [requirements])
+  const counts = useMemo(() => statusCounts(requirements, view), [requirements, view])
   const monthTrend = useMemo(
-    () => last6MonthsPublished(requirements),
-    [requirements],
+    () => last6MonthsPublished(requirements, view),
+    [requirements, view],
   )
 
-  const avgAll = useMemo(() => avgDevCycle(requirements), [requirements])
-  const avgYear = useMemo(() => avgDevCycle(yearItems), [yearItems])
-  const avgMonth = useMemo(() => avgDevCycle(monthItems), [monthItems])
+  const avgAll = useMemo(() => avgDevCycle(requirements, view), [requirements, view])
+  const avgYear = useMemo(() => avgDevCycle(yearItems, view), [yearItems, view])
+  const avgMonth = useMemo(() => avgDevCycle(monthItems, view), [monthItems, view])
 
-  // 各维度的已上线样本数（用于显示「样本 X 个」）
+  // 各维度的完成样本数（用于显示「样本 X 个」，口径与上方周期一致）
   const samples = useMemo(() => {
     const inMonth = (r: Requirement) =>
-      r.status === 'published' && r.publishTime && r.publishTime.slice(0, 7) === month
+      r.status === view.completedStatus && !!view.completedTime(r)?.startsWith(month)
     const inYear = (r: Requirement) =>
-      r.status === 'published' && r.publishTime && r.publishTime.slice(0, 4) === year
-    const any = (r: Requirement) => r.status === 'published' && !!r.publishTime
+      r.status === view.completedStatus && !!view.completedTime(r)?.startsWith(year)
+    const any = (r: Requirement) =>
+      r.status === view.completedStatus && !!view.completedTime(r)
     return {
       month: monthItems.filter(inMonth).length,
       year: yearItems.filter(inYear).length,
       all: requirements.filter(any).length,
     }
-  }, [requirements, monthItems, yearItems, month, year])
+  }, [requirements, monthItems, yearItems, view, month, year])
 
   const copy = async (key: 'week' | 'month', text: string) => {
     const ok = await copyToClipboard(text)
@@ -88,7 +95,7 @@ export function StatsView({ requirements }: { requirements: Requirement[] }) {
             数据<em>总览</em>
           </h2>
           <p className="wb-page-sub">
-            需求状态分布 · 月度上线趋势 · 平均开发周期 · 周报 / 月报素材
+            需求状态分布 · 月度{view.completedShort}趋势 · 平均周期 · 周报 / 月报素材
           </p>
         </div>
       </div>
@@ -143,9 +150,9 @@ export function StatsView({ requirements }: { requirements: Requirement[] }) {
       {/* 月报素材 */}
       <Section title="月报素材" hint="点击复制">
         <ReportBlock
-          text={buildMonthlyReport(requirements)}
+          text={buildMonthlyReport(requirements, view)}
           copied={copiedKey === 'month'}
-          onCopy={() => copy('month', buildMonthlyReport(requirements))}
+          onCopy={() => copy('month', buildMonthlyReport(requirements, view))}
         />
       </Section>
     </div>

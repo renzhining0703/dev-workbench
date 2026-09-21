@@ -12,7 +12,13 @@ import {
   formatProjectModuleLine,
 } from '../lib/projects'
 import { useStore } from '../store/StoreContext'
-import { isVisible, type VisibleFields, type TimeFieldKey } from '../lib/fields'
+import {
+  isVisible,
+  orderedFieldBlocks,
+  type FieldBlockId,
+  type VisibleFields,
+  type TimeFieldKey,
+} from '../lib/fields'
 import { isStatusVisible, visibleStatusOptions } from '../lib/statuses'
 import { ConfirmDialog, EmptyState, SkeletonRows } from './ui'
 import { Select } from './Select'
@@ -107,6 +113,16 @@ const TIME_FIELDS: { key: TimeFieldKey; label: string }[] = [
   { key: 'testTime', label: '提测' },
   { key: 'publishTime', label: '上线' },
 ]
+
+/** 可排序列块的固定宽度（表头与单元格共用，避免两处漂移）。
+ * 状态列也必须有 min-width：它是唯一不带固定宽度的列，在自适应表格布局里
+ * 会被当成「弹性列」，一旦别的列（如时间）排到它前面就可能被挤扁。 */
+const COL_WIDTH: Partial<Record<FieldBlockId, string>> = {
+  projectBranch: 'min-w-[330px]',
+  module: 'min-w-[180px]',
+  status: 'min-w-[130px]',
+  time: 'min-w-[340px]',
+}
 
 /**
  * 提测到期徽标：到了/超过提测日但状态还没进测试（待开发/开发中）时，
@@ -348,7 +364,7 @@ export function RequirementTable({
   }
 
   // 项目下拉数据源：来自项目库（顶栏「项目管理」维护）
-  const { projects, visibleFields, visibleStatuses } = useStore()
+  const { projects, visibleFields, visibleStatuses, fieldOrder } = useStore()
   const projectOptions = useMemo(
     () => projects.map((p) => ({ value: p.name, label: p.name })),
     [projects],
@@ -364,19 +380,39 @@ export function RequirementTable({
     [visibleStatuses],
   )
 
-  // 字段显隐派生的列/单元格开关（与表单、抽屉、看板读同一份配置）
+  // 字段级显隐（控制单元格内部渲染，与表单/抽屉/看板读同一份配置）
   const showProject = isVisible(visibleFields, 'project')
   const showBranch = isVisible(visibleFields, 'branch')
-  const showModule = isVisible(visibleFields, 'module')
-  const showStatus = isVisible(visibleFields, 'status')
   const showRemark = isVisible(visibleFields, 'remark')
-  const showTime =
-    isVisible(visibleFields, 'createdAt') ||
-    isVisible(visibleFields, 'devStartTime') ||
-    isVisible(visibleFields, 'devEndTime') ||
-    isVisible(visibleFields, 'testTime') ||
-    isVisible(visibleFields, 'publishTime')
-  const showProjectBranch = showProject || showBranch
+
+  /**
+   * 中间列块顺序：由「设置 → 列表列顺序」决定（默认与历史行为一致）。
+   * 需求名称列、备注（内联在名称列）与操作列是固定锚点，不参与排序，
+   * 因此这里只取可排序的块，再按字段显隐过滤掉整块不可见的列。
+   */
+  const columnBlockIds = useMemo(() => {
+    const blockVisible: Record<FieldBlockId, boolean> = {
+      projectBranch: isVisible(visibleFields, 'project') || isVisible(visibleFields, 'branch'),
+      module: isVisible(visibleFields, 'module'),
+      status: isVisible(visibleFields, 'status'),
+      time: isVisible(visibleFields, 'createdAt') ||
+        isVisible(visibleFields, 'devStartTime') ||
+        isVisible(visibleFields, 'devEndTime') ||
+        isVisible(visibleFields, 'testTime') ||
+        isVisible(visibleFields, 'publishTime'),
+      // 备注内联在需求名称列下方，不是独立列
+      remark: false,
+    }
+    return orderedFieldBlocks(fieldOrder)
+      .filter((b) => blockVisible[b.id])
+      .map((b) => b.id)
+  }, [fieldOrder, visibleFields])
+
+  const hasColumn = (id: FieldBlockId) => columnBlockIds.includes(id)
+  const showProjectBranch = hasColumn('projectBranch')
+  const showModule = hasColumn('module')
+  const showStatus = hasColumn('status')
+  const showTime = hasColumn('time')
 
   // 表格最小宽度：以全列默认值（1160 / 批量模式 1200）为基准，
   // 隐藏带固定 min-w 的列时相应扣减，避免字段隐藏后仍强制横向滚动。
@@ -849,20 +885,25 @@ export function RequirementTable({
                         <SortIcon active={sortField === 'name'} dir={sortDir} />
                       </span>
                     </th>
-                    {showProjectBranch && <th className="min-w-[330px]">项目 / 分支</th>}
-                    {showModule && <th className="min-w-[180px]">发布模块</th>}
-                    {showStatus && (
-                      <th
-                        className="cursor-pointer select-none"
-                        onClick={() => toggleSort('status')}
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          状态
-                          <SortIcon active={sortField === 'status'} dir={sortDir} />
-                        </span>
-                      </th>
+                    {/* 中间列块：顺序由「设置 → 列表列顺序」决定 */}
+                    {columnBlockIds.map((id) =>
+                      id === 'status' ? (
+                        <th
+                          key={id}
+                          className={`cursor-pointer select-none ${COL_WIDTH.status ?? ''}`}
+                          onClick={() => toggleSort('status')}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            状态
+                            <SortIcon active={sortField === 'status'} dir={sortDir} />
+                          </span>
+                        </th>
+                      ) : (
+                        <th key={id} className={COL_WIDTH[id]}>
+                          {id === 'projectBranch' ? '项目 / 分支' : id === 'module' ? '发布模块' : '时间'}
+                        </th>
+                      ),
                     )}
-                    {showTime && <th className="min-w-[340px]">时间</th>}
                     <th className="sticky right-0 z-10" style={{ textAlign: 'right', boxShadow: '-4px 0 8px -4px rgba(0,0,0,.06)' }}>
                       操作
                     </th>
@@ -906,59 +947,70 @@ export function RequirementTable({
                         )}
                         <TestDueBadge r={r} />
                       </td>
-                      {showProjectBranch && (
-                        <td className="min-w-[330px]">
-                          <ProjectBranchCell
-                            r={r}
-                            keyword={keyword}
-                            showProject={showProject}
-                            showBranch={showBranch}
-                            copiedBranch={copiedBranch}
-                            onCopyBranch={(b) => copyWithFeedback(b, setCopiedBranch)}
-                            onOpenOverflow={(e) => {
-                              overflowAnchorRef.current = e.currentTarget
-                              // 同步算位置，避免 useEffect 跑完前闪到 (0,0)
-                              const { top, left } = computeOverflowPos(e.currentTarget.getBoundingClientRect())
-                              setOverflow({ r, anchorTop: top, anchorLeft: left })
-                            }}
-                          />
-                        </td>
-                      )}
-                      {showModule && (
-                        <td className="min-w-[180px]">
-                          <ModuleLines
-                            r={r}
-                            keyword={keyword}
-                            copiedModule={copiedModule}
-                            onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
-                          />
-                        </td>
-                      )}
-                      {showStatus && (
-                        <td>
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => setStatusFilter(r.status)}
-                              className="group/dot shrink-0 rounded-full p-1 transition"
-                              style={{ color: 'var(--wb-ink-3)' }}
-                              title={`筛选「${statusMeta(r.status).label}」状态`}
-                            >
-                              <span className={`block h-2.5 w-2.5 rounded-full transition group-hover/dot:scale-125 ${statusMeta(r.status).dot}`} />
-                            </button>
-                            <Select
-                              size="sm"
-                              value={r.status}
-                              onChange={(s) => onStatusChange(r.id, s)}
-                              options={visibleStatusOptions(visibleStatuses, r.status)}
-                            />
-                          </div>
-                        </td>
-                      )}
-                      {showTime && (
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          <TimeCell r={r} fields={visibleFields} />
-                        </td>
-                      )}
+                      {/* 中间列块：顺序与表头保持一致 */}
+                      {columnBlockIds.map((id) => {
+                        switch (id) {
+                          case 'projectBranch':
+                            return (
+                              <td key={id} className={COL_WIDTH.projectBranch}>
+                                <ProjectBranchCell
+                                  r={r}
+                                  keyword={keyword}
+                                  showProject={showProject}
+                                  showBranch={showBranch}
+                                  copiedBranch={copiedBranch}
+                                  onCopyBranch={(b) => copyWithFeedback(b, setCopiedBranch)}
+                                  onOpenOverflow={(e) => {
+                                    overflowAnchorRef.current = e.currentTarget
+                                    // 同步算位置，避免 useEffect 跑完前闪到 (0,0)
+                                    const { top, left } = computeOverflowPos(e.currentTarget.getBoundingClientRect())
+                                    setOverflow({ r, anchorTop: top, anchorLeft: left })
+                                  }}
+                                />
+                              </td>
+                            )
+                          case 'module':
+                            return (
+                              <td key={id} className={COL_WIDTH.module}>
+                                <ModuleLines
+                                  r={r}
+                                  keyword={keyword}
+                                  copiedModule={copiedModule}
+                                  onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
+                                />
+                              </td>
+                            )
+                          case 'status':
+                            return (
+                              <td key={id}>
+                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => setStatusFilter(r.status)}
+                                    className="group/dot shrink-0 rounded-full p-1 transition"
+                                    style={{ color: 'var(--wb-ink-3)' }}
+                                    title={`筛选「${statusMeta(r.status).label}」状态`}
+                                  >
+                                    <span className={`block h-2.5 w-2.5 rounded-full transition group-hover/dot:scale-125 ${statusMeta(r.status).dot}`} />
+                                  </button>
+                                  <Select
+                                    size="sm"
+                                    value={r.status}
+                                    onChange={(s) => onStatusChange(r.id, s)}
+                                    options={visibleStatusOptions(visibleStatuses, r.status)}
+                                  />
+                                </div>
+                              </td>
+                            )
+                          case 'time':
+                            return (
+                              <td key={id} style={{ whiteSpace: 'nowrap' }}>
+                                <TimeCell r={r} fields={visibleFields} />
+                              </td>
+                            )
+                          default:
+                            return null
+                        }
+                      })}
                       <td
                         className="sticky right-0 z-10"
                         style={{ background: 'var(--wb-surface)', boxShadow: '-4px 0 8px -4px rgba(0,0,0,.08)' }}
@@ -1017,6 +1069,7 @@ export function RequirementTable({
                   key={r.id}
                   r={r}
                   visibleFields={visibleFields}
+                  columnBlockIds={columnBlockIds}
                   keyword={keyword}
                   copiedBranch={copiedBranch}
                   copiedModule={copiedModule}
@@ -1315,6 +1368,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 function RequirementCard({
   r,
   visibleFields,
+  columnBlockIds,
   keyword,
   copiedBranch,
   copiedModule,
@@ -1334,6 +1388,8 @@ function RequirementCard({
 }: {
   r: Requirement
   visibleFields: VisibleFields
+  /** 可排序字段块的顺序（与桌面表格共用，含可见性过滤） */
+  columnBlockIds: FieldBlockId[]
   keyword: string
   copiedBranch: string | null
   copiedModule: string | null
@@ -1355,15 +1411,7 @@ function RequirementCard({
   const meta = statusMeta(r.status)
   const showProject = isVisible(visibleFields, 'project')
   const showBranch = isVisible(visibleFields, 'branch')
-  const showModule = isVisible(visibleFields, 'module')
   const showRemark = isVisible(visibleFields, 'remark')
-  const showTime =
-    isVisible(visibleFields, 'createdAt') ||
-    isVisible(visibleFields, 'devStartTime') ||
-    isVisible(visibleFields, 'devEndTime') ||
-    isVisible(visibleFields, 'testTime') ||
-    isVisible(visibleFields, 'publishTime')
-  const showProjectBranch = showProject || showBranch
   return (
     <div
       className="space-y-2 px-4 py-3.5"
@@ -1447,33 +1495,40 @@ function RequirementCard({
       )}
       <TestDueBadge r={r} />
 
-      {/* 项目 / 分支 / 模块：与桌面表格一致的两行 + 多行模块布局 */}
-      {(showProjectBranch || showModule) && (
-        <div className="flex flex-col gap-1.5 text-xs">
-          {showProjectBranch && (
-            <ProjectBranchCell
-              r={r}
-              keyword={keyword}
-              showProject={showProject}
-              showBranch={showBranch}
-              copiedBranch={copiedBranch}
-              onCopyBranch={onCopyBranch}
-              onOpenOverflow={onOpenOverflow}
-            />
-          )}
-          {showModule && (
-            <ModuleLines
-              r={r}
-              keyword={keyword}
-              copiedModule={copiedModule}
-              onCopyModule={onCopyModule}
-            />
-          )}
-        </div>
-      )}
-
-      {/* 时间 */}
-      {showTime && <TimeCell r={r} fields={visibleFields} wrap />}
+      {/* 字段块：顺序与桌面表格一致（「设置 → 列表列顺序」） */}
+      {columnBlockIds.map((id) => {
+        if (id === 'projectBranch') {
+          return (
+            <div key={id} className="text-xs">
+              <ProjectBranchCell
+                r={r}
+                keyword={keyword}
+                showProject={showProject}
+                showBranch={showBranch}
+                copiedBranch={copiedBranch}
+                onCopyBranch={onCopyBranch}
+                onOpenOverflow={onOpenOverflow}
+              />
+            </div>
+          )
+        }
+        if (id === 'module') {
+          return (
+            <div key={id} className="text-xs">
+              <ModuleLines
+                r={r}
+                keyword={keyword}
+                copiedModule={copiedModule}
+                onCopyModule={onCopyModule}
+              />
+            </div>
+          )
+        }
+        if (id === 'time') {
+          return <TimeCell key={id} r={r} fields={visibleFields} wrap />
+        }
+        return null
+      })}
     </div>
   )
 }

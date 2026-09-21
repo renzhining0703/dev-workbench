@@ -12,7 +12,7 @@ interface Props {
  * SVG 圆环图（按 STATUS_FLOW 顺序从顶部 12 点方向顺时针排列）
  * - 中心显示总数
  * - 右侧图例显示每个状态的数量
- * - 零值状态不画扇形，图例仍展示（让用户看到全部维度）
+ * - 零值状态不画扇形，图例仍展示（让用户看到传入口径的全部维度）
  */
 export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
   const total = useMemo(
@@ -22,10 +22,13 @@ export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
   const radius = (size - thickness) / 2
   const circumference = 2 * Math.PI * radius
 
+  /** 参与渲染的状态：只取 counts 里实际存在的键（统计视角过滤后隐藏状态无键） */
+  const flow = useMemo(() => STATUS_FLOW.filter((s) => s in counts), [counts])
+
   const segments = useMemo(() => {
     if (total === 0) return []
     let offset = 0
-    return STATUS_FLOW.map((status) => {
+    return flow.map((status) => {
       const value = counts[status]
       const fraction = value / total
       const dash = fraction * circumference
@@ -107,7 +110,7 @@ export function DonutChart({ counts, size = 168, thickness = 24 }: Props) {
 
       {/* 图例 */}
       <ul className="wb-legend">
-        {STATUS_FLOW.map((status) => (
+        {flow.map((status) => (
           <li key={status}>
             <span
               className="sw"

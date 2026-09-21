@@ -16,12 +16,14 @@ import {
   type RequirementFieldKey,
 } from '../lib/fields'
 import { isStatusVisible } from '../lib/statuses'
+import { ROLE_PRESETS } from '../lib/rolePresets'
 import { Switch } from './ui'
 
 /**
  * 设置中心 · 外观与显示面板
  *
- * 三块内容：
+ * 四块内容：
+ *   使用视角  —— 开发 / 产品一键预设（打包下方三块配置），手动调整后变自定义
  *   主题      —— 跟随系统 / 浅色 / 深色（与顶栏切换按钮共享同一份状态）
  *   字段显示  —— 逐字段开关，作用于表单、列表、看板、详情抽屉
  *   列表列顺序 —— 按「展示块」拖拽调整列表列 / 移动端卡片块的顺序
@@ -83,6 +85,107 @@ function ToggleRow({
       </div>
       <Switch checked={checked} onChange={onChange} label={label} />
     </div>
+  )
+}
+
+/* ---------------- 使用视角 ---------------- */
+
+/**
+ * 使用视角（开发 / 产品 / 自定义）。
+ *
+ * - 两个预设会一次性覆盖下方「字段显示 / 状态显示 / 列表列顺序」三块配置，切换前弹确认
+ * - 「自定义」也可直接点选：只解除与预设的绑定，**不改动**当前三块配置；
+ *   在下方手动调整任意配置后也会自动落到这里
+ */
+function RoleSection() {
+  const { uiRole, applyRolePreset, setUiRole } = useStore()
+
+  /**
+   * 点击预设 = 一键覆盖下方三块配置。
+   * 已选中的预设也允许「重新应用」——预设定义会随版本演进而调整，
+   * 老用户需要一条无需手动重配就能对齐新预设的路径。
+   */
+  const select = (id: 'dev' | 'pm') => {
+    const preset = ROLE_PRESETS.find((p) => p.id === id)
+    if (!preset) return
+    const ok = window.confirm(
+      uiRole === id
+        ? `重新应用「${preset.label}」预设：会用最新预设覆盖你之后的任何手动调整（字段显示、状态显示、列顺序）。\n数据本身不受影响，确定吗？`
+        : `切换到「${preset.label}」会用预设覆盖当前的字段显示、状态显示与列顺序配置。\n数据本身不受影响，确定切换吗？`,
+    )
+    if (ok) applyRolePreset(id)
+  }
+
+  /** 选中「自定义」：保留当前配置，仅把视角标记切到 custom（无覆盖，故不弹确认） */
+  const selectCustom = () => {
+    if (uiRole === 'custom') return
+    setUiRole('custom')
+  }
+
+  const cardStyle = (active: boolean) => ({
+    borderColor: active ? 'var(--wb-brand-500)' : 'var(--wb-line)',
+    background: active ? 'var(--wb-brand-soft, rgba(42,112,86,.1))' : 'var(--wb-surface)',
+    cursor: 'pointer' as const,
+  })
+
+  const titleStyle = (active: boolean, muted = false) => ({
+    color: active
+      ? 'var(--wb-brand-600, var(--wb-brand-500))'
+      : muted
+        ? 'var(--wb-ink-2)'
+        : 'var(--wb-ink)',
+  })
+
+  return (
+    <section>
+      <SectionHead
+        title="使用视角"
+        desc="一键应用预设：自动配置下方三块的显隐与顺序。前端开发与产品经理按各自习惯选择即可。"
+      />
+      <div className="grid gap-2 sm:grid-cols-3">
+        {ROLE_PRESETS.map((p) => {
+          const active = uiRole === p.id
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => select(p.id)}
+              aria-pressed={active}
+              className="rounded-xl border p-3 text-left transition hover:opacity-85"
+              style={cardStyle(active)}
+            >
+              <span className="text-sm font-medium" style={titleStyle(active)}>
+                {active ? '✓ ' : ''}
+                {p.label}
+                {active && (
+                  <span className="ml-1 font-normal" style={{ color: 'var(--wb-ink-3)', fontSize: 11 }}>
+                    点击可重新应用
+                  </span>
+                )}
+              </span>
+              <p className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--wb-ink-3)' }}>
+                {p.desc}
+              </p>
+            </button>
+          )
+        })}
+        {/* 自定义：可点选（不覆盖配置），也是手动调整后的落点状态 */}
+        <button
+          type="button"
+          onClick={selectCustom}
+          aria-pressed={uiRole === 'custom'}
+          className="rounded-xl border p-3 text-left transition hover:opacity-85"
+          style={cardStyle(uiRole === 'custom')}
+        >
+          <span className="text-sm font-medium" style={titleStyle(uiRole === 'custom', true)}>
+            {uiRole === 'custom' ? '✓ ' : ''}自定义
+          </span>
+          <p className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--wb-ink-3)' }}>
+            保留当前配置，不跟预设绑定；在下方手动调整字段、状态或顺序后也会自动落到这里
+          </p>
+        </button>
+      </div>
+    </section>
   )
 }
 
@@ -164,7 +267,7 @@ function FieldVisibilitySection() {
         ))}
       </div>
       <p className="mt-2 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-        💡 仅保存在本设备，不同设备可各自配置；「需求名称」为标识字段，恒显。
+        💡 随账号云端同步（settings.uiPrefs 通道），换设备无需重配；「需求名称」为标识字段，恒显。
       </p>
     </section>
   )
@@ -211,7 +314,7 @@ function StatusVisibilitySection() {
         })}
       </div>
       <p className="mt-2 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-        💡 仅保存在本设备，不影响统计页与自动归档逻辑。
+        💡 随账号云端同步；统计页与筛选口径跟随此处配置，不影响数据与自动归档逻辑。
       </p>
     </section>
   )
@@ -355,7 +458,7 @@ function FieldOrderSection() {
           </p>
         ))}
         <p className="text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-          💡 顺序仅保存在本设备，不影响表单与详情抽屉的字段排列。
+          💡 顺序不影响表单与详情抽屉的字段排列。
         </p>
       </div>
     </section>
@@ -365,6 +468,7 @@ function FieldOrderSection() {
 export function SettingsDisplayPanel() {
   return (
     <div className="space-y-7">
+      <RoleSection />
       <ThemeSection />
       <FieldVisibilitySection />
       <StatusVisibilitySection />

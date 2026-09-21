@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import type { Requirement } from '../types'
+import type { Requirement, RequirementStatus } from '../types'
 import { useStore } from '../store/StoreContext'
 import { isVisible } from '../lib/fields'
-import { visibleStatusOptions } from '../lib/statuses'
+import { defaultVisibleStatuses, visibleStatusOptions } from '../lib/statuses'
+import { defaultStatusForNewRequirement } from '../lib/rolePresets'
 import { Modal } from './ui'
 import { Select } from './Select'
 
@@ -13,13 +14,13 @@ export type RequirementDraft = Omit<Requirement, 'id' | 'updatedAt'>
 const newRequirementBranchPrefix = (): string =>
   `feature/${format(new Date(), 'yyyyMMdd')}/REQ-`
 
-const emptyDraft = (): RequirementDraft => ({
+const emptyDraft = (status: RequirementStatus, branch: string): RequirementDraft => ({
   name: '',
   project: '',
   projects: [],
-  branch: newRequirementBranchPrefix(),
+  branch,
   publishModule: '',
-  status: 'pending',
+  status,
   createdAt: new Date().toISOString(),
   devStartTime: null,
   devEndTime: null,
@@ -61,11 +62,28 @@ export function RequirementFormModal({
   onClose: () => void
   onSave: (draft: RequirementDraft) => void
 }) {
-  const [draft, setDraft] = useState<RequirementDraft>(emptyDraft)
+  const [draft, setDraft] = useState<RequirementDraft>(() =>
+    emptyDraft(defaultStatusForNewRequirement(defaultVisibleStatuses()), newRequirementBranchPrefix()),
+  )
   // 「+ 添加项目」下拉的开关
   const [addingProject, setAddingProject] = useState(false)
 
   const { projects, visibleFields, visibleStatuses } = useStore()
+
+  /**
+   * 新建 / 克隆的默认状态：跟随当前使用视角
+   * （产品视角 = 未开始，其余口径 = 待开发）。
+   */
+  const defaultStatus = useMemo(
+    () => defaultStatusForNewRequirement(visibleStatuses),
+    [visibleStatuses],
+  )
+
+  /** 分支字段被隐藏时（如产品视角）不再预填分支前缀，避免产生看不见的脏数据 */
+  const defaultBranch = useMemo(
+    () => (isVisible(visibleFields, 'branch') ? newRequirementBranchPrefix() : ''),
+    [visibleFields],
+  )
 
   /** 项目名 → 是否支持分模块发布 */
   const moduleBasedMap = useMemo(() => {
@@ -102,14 +120,14 @@ export function RequirementFormModal({
         remark: initial.remark,
       })
     } else if (prefill) {
-      // 克隆模式：复制模板字段，时间清空、状态重置 pending、分支用今日新前缀
+      // 克隆模式：复制模板字段，时间清空、状态回落到当前视角默认、分支用今日新前缀
       setDraft({
         name: prefill.name ? `${prefill.name} (副本)` : '',
         project: prefill.project ?? '',
         projects: (prefill.projects ?? []).map((p) => ({ ...p })),
-        branch: newRequirementBranchPrefix(),
+        branch: defaultBranch,
         publishModule: prefill.publishModule ?? '',
-        status: 'pending',
+        status: defaultStatus,
         createdAt: new Date().toISOString(),
         devStartTime: null,
         devEndTime: null,
@@ -119,9 +137,12 @@ export function RequirementFormModal({
       })
     } else {
       // 新建模式
-      setDraft(emptyDraft())
+      setDraft(emptyDraft(defaultStatus, defaultBranch))
     }
     setAddingProject(false)
+    // defaultStatus / defaultBranch 仅在「打开弹窗」这一刻取值，故不进依赖：
+    // 避免编辑中途改偏好把表单已填内容重置
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial, prefill])
 
   const set = <K extends keyof RequirementDraft>(key: K, value: RequirementDraft[K]) =>

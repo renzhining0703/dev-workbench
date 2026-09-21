@@ -28,6 +28,7 @@ import { mergeByUpdatedAt } from '../lib/merge'
 import { active, gcTombstones } from '../lib/tombstone'
 import {
   defaultFieldOrder,
+  defaultVisibleFields,
   loadFieldOrder,
   loadVisibleFields,
   mergeFieldOrder,
@@ -37,10 +38,24 @@ import {
   type VisibleFields,
 } from '../lib/fields'
 import {
+  defaultVisibleStatuses,
   loadVisibleStatuses,
   saveVisibleStatuses,
   type VisibleStatuses,
 } from '../lib/statuses'
+import {
+  findRolePreset,
+  loadUiRole,
+  saveUiRole,
+  type UiRole,
+} from '../lib/rolePresets'
+import {
+  isTsAfter,
+  loadUiPrefsTs,
+  saveUiPrefsTs,
+  mergeUiPrefs,
+  type UiPrefs,
+} from '../lib/uiPrefs'
 
 /** 同步触发器：由外部（App 层 startSync）注入；mutation 后调用 */
 export type PushTrigger = () => void
@@ -60,20 +75,20 @@ interface Store {
     requirements: Requirement[]
     todos: TodoItem[]
     projects: Project[]
-    settings: { autoArchiveMonths: number }
+    settings: { autoArchiveMonths: number; uiPrefs: UiPrefs }
   }
   /** 自动归档月份（同步通道） */
   archiveMonths: number
-  /** 需求字段显隐配置（本地偏好，不云同步） */
+  /** 需求字段显隐配置 */
   visibleFields: VisibleFields
-  /** 切换某个需求字段的显隐（本地持久化，不云同步） */
+  /** 切换某个需求字段的显隐 */
   setVisibleField: (key: RequirementFieldKey, visible: boolean) => void
-  /** 需求状态显隐配置（本地偏好，不云同步） */
+  /** 需求状态显隐配置 */
   visibleStatuses: VisibleStatuses
-  /** 切换某个需求状态的显隐（本地持久化，不云同步） */
+  /** 切换某个需求状态的显隐 */
   setVisibleStatus: (key: RequirementStatus, visible: boolean) => void
   /**
-   * 需求列表的字段展示顺序（本地偏好，不云同步）。
+   * 需求列表的字段展示顺序。
    * 只影响列表渲染（表格列 / 移动端卡片块），不影响表单与详情抽屉。
    */
   fieldOrder: RequirementFieldKey[]
@@ -81,6 +96,15 @@ interface Store {
   setFieldOrder: (order: RequirementFieldKey[]) => void
   /** 恢复默认字段顺序 */
   resetFieldOrder: () => void
+  /**
+   * 当前使用视角（开发 / 产品 / 自定义）。
+   * 选择预设 = 一键覆盖下方三份配置；手动调整任意配置后自动降级为 custom。
+   */
+  uiRole: UiRole
+  /** 应用视角预设（一次性写入字段显隐 / 状态显隐 / 列顺序） */
+  applyRolePreset: (id: 'dev' | 'pm') => void
+  /** 直接设置视角标记（用于选中「自定义」：保留当前配置，仅解除预设绑定） */
+  setUiRole: (role: UiRole) => void
   addRequirement: (draft: Omit<Requirement, 'id' | 'updatedAt'>) => void
   updateRequirement: (draft: Requirement) => void
   removeRequirement: (id: string) => void
@@ -123,7 +147,7 @@ interface Store {
     requirements: Requirement[]
     todos: TodoItem[]
     projects: Project[]
-    settings?: { autoArchiveMonths?: number }
+    settings?: { autoArchiveMonths?: number; uiPrefs?: unknown }
   }) => void
 }
 
@@ -169,6 +193,9 @@ export function StoreProvider({
   const [fieldOrder, setFieldOrderState] = useState<RequirementFieldKey[]>(() =>
     loadFieldOrder(),
   )
+  const [uiRole, setUiRoleState] = useState<UiRole>(() => loadUiRole())
+  /** 偏好时间戳（跨设备 LWW 判定；纪元值 = 本地无变更，远端任意有效偏好胜出） */
+  const [uiPrefsTs, setUiPrefsTsState] = useState<string>(() => loadUiPrefsTs())
 
   const trigger = pushTrigger ?? noopPush
   const triggerRef = useRef(trigger)
@@ -192,6 +219,12 @@ export function StoreProvider({
       }
       if (e.key === 'dev-workbench:requirement-field-order') {
         setFieldOrderState(loadFieldOrder())
+      }
+      if (e.key === 'dev-workbench:ui-role') {
+        setUiRoleState(loadUiRole())
+      }
+      if (e.key === 'dev-workbench:ui-prefs-ts') {
+        setUiPrefsTsState(loadUiPrefsTs())
       }
     }
     window.addEventListener('storage', onStorage)
@@ -502,36 +535,125 @@ export function StoreProvider({
     triggerRef.current()
   }, [])
 
-  /** 切换某个需求字段的显隐（本地偏好，仅本设备，不云同步） */
-  const setVisibleField = useCallback((key: RequirementFieldKey, visible: boolean) => {
-    setVisibleFieldsState((prev) => {
-      const next = { ...prev, [key]: visible }
-      saveVisibleFields(next)
-      return next
+  /** 偏好发生本地变更：打时间戳 + 触发推送（settings.uiPrefs 随账号同步） */
+  const bumpPrefsTs = useCallback(() => {
+    const t = nowISO()
+    saveUiPrefsTs(t)
+    setUiPrefsTsState(t)
+    triggerRef.current()
+  }, [])
+
+  /** 手动调整任意偏好 → 视角降级为自定义（已选中预设时才写入，避免无谓 IO） */
+  const demoteToCustom = useCallback(() => {
+    setUiRoleState((prev) => {
+      if (prev === 'custom') return prev
+      saveUiRole('custom')
+      return 'custom'
     })
   }, [])
 
-  /** 切换某个需求状态的显隐（本地偏好，仅本设备，不云同步） */
-  const setVisibleStatus = useCallback((key: RequirementStatus, visible: boolean) => {
-    setVisibleStatusesState((prev) => {
-      const next = { ...prev, [key]: visible }
-      saveVisibleStatuses(next)
-      return next
-    })
-  }, [])
+  /** 切换某个需求字段的显隐 */
+  const setVisibleField = useCallback(
+    (key: RequirementFieldKey, visible: boolean) => {
+      setVisibleFieldsState((prev) => {
+        const next = { ...prev, [key]: visible }
+        saveVisibleFields(next)
+        return next
+      })
+      demoteToCustom()
+      bumpPrefsTs()
+    },
+    [demoteToCustom, bumpPrefsTs],
+  )
 
-  /** 覆盖字段展示顺序（本地偏好，仅本设备，不云同步） */
-  const setFieldOrder = useCallback((order: RequirementFieldKey[]) => {
-    const next = mergeFieldOrder(order)
-    setFieldOrderState(next)
-    saveFieldOrder(next)
-  }, [])
+  /** 切换某个需求状态的显隐 */
+  const setVisibleStatus = useCallback(
+    (key: RequirementStatus, visible: boolean) => {
+      setVisibleStatusesState((prev) => {
+        const next = { ...prev, [key]: visible }
+        saveVisibleStatuses(next)
+        return next
+      })
+      demoteToCustom()
+      bumpPrefsTs()
+    },
+    [demoteToCustom, bumpPrefsTs],
+  )
+
+  /** 覆盖字段展示顺序 */
+  const setFieldOrder = useCallback(
+    (order: RequirementFieldKey[]) => {
+      const next = mergeFieldOrder(order)
+      setFieldOrderState(next)
+      saveFieldOrder(next)
+      demoteToCustom()
+      bumpPrefsTs()
+    },
+    [demoteToCustom, bumpPrefsTs],
+  )
 
   /** 恢复默认字段顺序 */
   const resetFieldOrder = useCallback(() => {
     const next = defaultFieldOrder()
     setFieldOrderState(next)
     saveFieldOrder(next)
+    demoteToCustom()
+    bumpPrefsTs()
+  }, [demoteToCustom, bumpPrefsTs])
+
+  /**
+   * 应用视角预设：一次性写入三份配置（字段显隐 / 状态显隐 / 列顺序）。
+   * 由 UI 层负责确认（覆盖手动配置），这里只做写入。
+   */
+  const applyRolePreset = useCallback((id: 'dev' | 'pm') => {
+    const preset = findRolePreset(id)
+    if (!preset) return
+    saveVisibleFields(preset.visibleFields)
+    setVisibleFieldsState(preset.visibleFields)
+    saveVisibleStatuses(preset.visibleStatuses)
+    setVisibleStatusesState(preset.visibleStatuses)
+    saveFieldOrder(preset.fieldOrder)
+    setFieldOrderState(preset.fieldOrder)
+    saveUiRole(id)
+    setUiRoleState(id)
+    const t = nowISO()
+    saveUiPrefsTs(t)
+    setUiPrefsTsState(t)
+    triggerRef.current()
+  }, [])
+
+  /**
+   * 直接设置使用视角标记（不动三份配置）。
+   *
+   * 用途：设置中心里「自定义」卡片可被直接选中 —— 语义是「保留当前字段/状态/顺序
+   * 配置，但解除与预设的绑定」，因此只写 ui-role + 打同步时间戳。
+   * 预设有配置语义，仍走 applyRolePreset。
+   */
+  const setUiRole = useCallback(
+    (role: UiRole) => {
+      if (role === uiRole) return
+      saveUiRole(role)
+      setUiRoleState(role)
+      bumpPrefsTs()
+    },
+    [uiRole, bumpPrefsTs],
+  )
+
+  /**
+   * 应用远端 UI 偏好（由 applyRemote 调用）。
+   * 仅当远端时间戳严格更新时覆盖本地（LWW），避免旧偏好冲掉刚改好的配置。
+   */
+  const applyRemoteUiPrefs = useCallback((prefs: UiPrefs) => {
+    saveVisibleFields(prefs.visibleFields)
+    setVisibleFieldsState(prefs.visibleFields)
+    saveVisibleStatuses(prefs.visibleStatuses)
+    setVisibleStatusesState(prefs.visibleStatuses)
+    saveFieldOrder(prefs.fieldOrder)
+    setFieldOrderState(prefs.fieldOrder)
+    saveUiRole(prefs.role)
+    setUiRoleState(prefs.role)
+    saveUiPrefsTs(prefs.updatedAt)
+    setUiPrefsTsState(prefs.updatedAt)
   }, [])
 
   /**
@@ -547,7 +669,7 @@ export function StoreProvider({
       requirements: Requirement[]
       todos: TodoItem[]
       projects: Project[]
-      settings?: { autoArchiveMonths?: number }
+      settings?: { autoArchiveMonths?: number; uiPrefs?: unknown }
     }) => {
       // 云端数据统一规范化（旧快照可能缺 projects 字段），合并后清理超期墓碑
       const mergedReqs = gcTombstones(mergeByUpdatedAt(
@@ -567,23 +689,45 @@ export function StoreProvider({
         persistArchiveMonths(m)
         setArchiveMonthsState(m)
       }
+      // UI 偏好：远端时间戳更新时才覆盖本地（见 lib/uiPrefs.ts）
+      const remotePrefs = mergeUiPrefs(snap.settings?.uiPrefs)
+      if (remotePrefs && isTsAfter(remotePrefs.updatedAt, uiPrefsTs)) {
+        applyRemoteUiPrefs(remotePrefs)
+      }
     },
-    [requirements, todos, projects],
+    [requirements, todos, projects, uiPrefsTs, applyRemoteUiPrefs],
   )
 
   /**
    * 清空本地全部数据 + 业务 localStorage key
    * 切换用户 / 登出时调用；不触发 push
+   *
+   * UI 偏好也一并重置：偏好已随账号同步，切换账号后本地旧偏好（时间戳可能更新）
+   * 会挡住新账号的服务端偏好，必须清干净（时间戳回纪元）。
    */
   const clearAll = useCallback(() => {
     localStorage.removeItem('dev-workbench:requirements')
     localStorage.removeItem('dev-workbench:todos')
     localStorage.removeItem('dev-workbench:projects')
     localStorage.removeItem('dev-workbench:auto-archive-months')
+    // 偏好三件套 + 角色 + 时间戳全部重置为默认
+    const defFields = defaultVisibleFields()
+    const defStatuses = defaultVisibleStatuses()
+    const defOrder = defaultFieldOrder()
+    saveVisibleFields(defFields)
+    saveVisibleStatuses(defStatuses)
+    saveFieldOrder(defOrder)
+    saveUiRole('custom')
+    saveUiPrefsTs(new Date(0).toISOString())
     setRequirements([])
     setTodos([])
     setProjects([])
     setArchiveMonthsState(3)
+    setVisibleFieldsState(defFields)
+    setVisibleStatusesState(defStatuses)
+    setFieldOrderState(defOrder)
+    setUiRoleState('custom')
+    setUiPrefsTsState(new Date(0).toISOString())
   }, [])
 
   /** 同步层专用：完整数据（含墓碑）。push 快照必须带墓碑，删除才能传播 */
@@ -592,9 +736,18 @@ export function StoreProvider({
       requirements,
       todos,
       projects,
-      settings: { autoArchiveMonths: archiveMonths },
+      settings: {
+        autoArchiveMonths: archiveMonths,
+        uiPrefs: {
+          updatedAt: uiPrefsTs,
+          role: uiRole,
+          visibleFields,
+          visibleStatuses,
+          fieldOrder,
+        },
+      },
     }),
-    [requirements, todos, projects, archiveMonths],
+    [requirements, todos, projects, archiveMonths, uiPrefsTs, uiRole, visibleFields, visibleStatuses, fieldOrder],
   )
 
   const value = useMemo(
@@ -612,6 +765,9 @@ export function StoreProvider({
       fieldOrder,
       setFieldOrder,
       resetFieldOrder,
+      uiRole,
+      applyRolePreset,
+      setUiRole,
       addRequirement,
       updateRequirement,
       removeRequirement,
@@ -634,6 +790,7 @@ export function StoreProvider({
       requirements, todos, projects, archiveMonths, getSyncData,
       visibleFields, setVisibleField, visibleStatuses, setVisibleStatus,
       fieldOrder, setFieldOrder, resetFieldOrder,
+      uiRole, applyRolePreset, setUiRole, uiPrefsTs,
       addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements,
       addTodo, toggleTodo, updateTodo, removeTodo,
       addProject, updateProject, removeProject,
