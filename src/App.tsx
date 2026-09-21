@@ -18,15 +18,15 @@ import { BackupModal } from './components/BackupModal'
 import { InstallPrompt } from './components/InstallPrompt'
 import { StatsView } from './components/StatsView'
 import { EfficiencyView } from './components/EfficiencyView'
-import { PreferencesModal } from './components/PreferencesModal'
 import { ShortcutsModal } from './components/ShortcutsModal'
-import { PushModal } from './components/PushModal'
+import { SettingsModal } from './components/SettingsModal'
 import { AddTodoModal } from './components/AddTodoModal'
 import { CommandPalette, type PaletteTab } from './components/CommandPalette'
 import { AuthPage } from './components/AuthPage'
 import { UserMenu } from './components/UserMenu'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthProvider, useAuth } from './store/AuthContext'
+import { ThemeProvider, useTheme } from './store/ThemeContext'
 import { findAutoArchiveTargets } from './lib/archive'
 import { countTodosByRequirement } from './lib/todos'
 import { parseImportData } from './lib/migrate'
@@ -40,25 +40,13 @@ type ListView = 'table' | 'kanban'
 /** 首次启动自动导入历史数据的一次性标记（避免清空数据后又自动填回） */
 const IMPORT_FLAG_KEY = 'dev-workbench:legacy-imported'
 
-/** 主题切换（跟随系统，可手动覆盖） */
-function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('dev-workbench:theme')
-    if (saved === 'light' || saved === 'dark') return saved
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  })
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    localStorage.setItem('dev-workbench:theme', theme)
-  }, [theme])
-  return { theme, toggle: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')) }
-}
-
 export default function App() {
   return (
-    <AuthProvider>
-      <AppShell />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 
@@ -166,10 +154,9 @@ function AppInner({
   const [importOpen, setImportOpen] = useState(false)
   const [backupOpen, setBackupOpen] = useState(false)
   const [projectOpen, setProjectOpen] = useState(false)
-  const [preferencesOpen, setPreferencesOpen] = useState(false)
+  /** 设置中心（常规 / 外观与显示 / 通知 / 快捷键）—— 原「偏好设置」+「推送提醒」合并入口 */
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  // Web Push 推送提醒设置
-  const [pushOpen, setPushOpen] = useState(false)
   const [archiveToast, setArchiveToast] = useState<{ count: number; months: number } | null>(null)
   const [undoToast, setUndoToast] = useState<{ label: string; items: Requirement[] } | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -187,12 +174,6 @@ function AppInner({
   const archiveRunRef = useRef(false)
   // 撤销删除的定时器
   const undoTimerRef = useRef<number | null>(null)
-  const [notifySupported] = useState(
-    () => typeof Notification !== 'undefined',
-  )
-  const [notifyGranted, setNotifyGranted] = useState(
-    () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
-  )
   const [notifyToast, setNotifyToast] = useState<{ tone: 'ok' | 'warn'; title: string; desc?: string } | null>(null)
   const notifyToastTimerRef = useRef<number | null>(null)
   // 更多操作下拉外点关闭：header 有 backdrop-blur（backdrop-filter 会为 fixed 后代建 containing block），
@@ -268,32 +249,6 @@ function AppInner({
     if (notifyToastTimerRef.current !== null) window.clearTimeout(notifyToastTimerRef.current)
     notifyToastTimerRef.current = window.setTimeout(() => setNotifyToast(null), 8000)
   }, [])
-
-  const requestNotify = useCallback(() => {
-    if (typeof Notification === 'undefined') return
-    if (Notification.permission === 'denied') {
-      showNotifyToast({
-        tone: 'warn',
-        title: '通知权限已被浏览器拒绝',
-        desc: '点击地址栏左侧的站点设置图标，把「通知」改为允许，再回到本页重新开启。',
-      })
-      return
-    }
-    Notification.requestPermission().then((p) => {
-      setNotifyGranted(p === 'granted')
-      if (p === 'granted') {
-        showNotifyToast({ tone: 'ok', title: '已开启上线提醒', desc: '今日有需求上线时会收到桌面通知。' })
-      } else if (p === 'denied') {
-        showNotifyToast({
-          tone: 'warn',
-          title: '通知权限被拒绝',
-          desc: '点击地址栏左侧的站点设置图标，把「通知」改为允许，再回到本页重新开启。',
-        })
-      } else {
-        showNotifyToast({ tone: 'warn', title: '未开启通知', desc: '可在「更多」菜单中再次开启。' })
-      }
-    })
-  }, [showNotifyToast])
 
   const handleSave = (draft: RequirementDraft) => {
     if (editing) {
@@ -427,15 +382,9 @@ function AppInner({
     <div className="min-h-screen">
       <InstallPrompt />
 
-      <PreferencesModal
-        open={preferencesOpen}
-        onClose={() => setPreferencesOpen(false)}
-      />
-
-      <PushModal
-        open={pushOpen}
-        onClose={() => setPushOpen(false)}
-        token={auth.session?.token ?? null}
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
 
       <ShortcutsModal
@@ -634,7 +583,7 @@ function AppInner({
                     <button
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
                       style={{ color: 'var(--wb-ink-2)' }}
-                      onClick={() => { setMobileMenuOpen(false); setPreferencesOpen(true) }}
+                      onClick={() => { setMobileMenuOpen(false); setSettingsOpen(true) }}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="3" />
@@ -642,31 +591,6 @@ function AppInner({
                       </svg>
                       设置
                     </button>
-                    {notifySupported && !notifyGranted && (
-                      <button
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
-                      style={{ color: 'var(--wb-ink-2)' }}
-                        onClick={() => { setMobileMenuOpen(false); requestNotify() }}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-                        </svg>
-                        开启上线提醒
-                      </button>
-                    )}
-                    {auth.session && (
-                      <button
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
-                        style={{ color: 'var(--wb-ink-2)' }}
-                        onClick={() => { setMobileMenuOpen(false); setPushOpen(true) }}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                        </svg>
-                        推送提醒
-                      </button>
-                    )}
                   </div>
                 </>
               )}

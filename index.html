@@ -29,11 +29,13 @@
 
     <script>
       // 首屏前应用主题，避免闪烁
+      // 偏好为 'light' / 'dark' 时直接使用，'system'（或未设置）时跟随系统
       ;(function () {
         var saved = localStorage.getItem('dev-workbench:theme')
         var dark =
           saved === 'dark' ||
-          (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          ((!saved || saved === 'system') &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.classList.toggle('dark', dark)
       })()
     </script>

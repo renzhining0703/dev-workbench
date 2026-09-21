@@ -1,5 +1,6 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useId, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+
 /** 模态弹窗 */
 export function Modal({
   open,
@@ -7,12 +8,18 @@ export function Modal({
   title,
   children,
   width = 'max-w-2xl',
+  /**
+   * flush：内容自适应布局（卡片自身不内边距、不滚动，头部固定带分割线）。
+   * 供「设置中心」这类需要内部两栏 + 局部滚动的弹窗使用；默认 false 时行为与旧版完全一致。
+   */
+  flush = false,
 }: {
   open: boolean
   onClose: () => void
   title: string
   children: ReactNode
   width?: string
+  flush?: boolean
 }) {
   useEffect(() => {
     if (!open) return
@@ -30,9 +37,18 @@ export function Modal({
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className={`wb-card w-full ${width} my-8 max-h-[90vh] overflow-y-auto p-6`}
+        className={`wb-card w-full ${width} my-8 ${
+          flush ? 'overflow-hidden' : 'max-h-[90vh] overflow-y-auto p-6'
+        }`}
       >
-        <div className="mb-5 flex items-center justify-between">
+        <div
+          className={
+            flush
+              ? 'flex items-center justify-between border-b px-5 py-3.5'
+              : 'mb-5 flex items-center justify-between'
+          }
+          style={flush ? { borderColor: 'var(--wb-line)' } : undefined}
+        >
           <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--wb-ink)' }}>
             {title}
           </h3>
@@ -53,6 +69,53 @@ export function Modal({
     document.body,
   )
 }
+
+/**
+ * 开关（Switch）。
+ * 用原生 button + role="switch"，天然支持 Tab 聚焦 / Space 与 Enter 切换。
+ * 配色走主题变量，明暗主题自适应。
+ */
+export function Switch({
+  checked,
+  onChange,
+  disabled = false,
+  label,
+  size = 'md',
+}: {
+  checked: boolean
+  onChange: (next: boolean) => void
+  disabled?: boolean
+  /** 无障碍名称；外层已有可见文字标签时可不传 */
+  label?: string
+  size?: 'sm' | 'md'
+}) {
+  const id = useId()
+  const dims = size === 'sm'
+    ? { track: 'h-[18px] w-[32px]', thumb: 14, travel: 14 }
+    : { track: 'h-[22px] w-[38px]', thumb: 18, travel: 18 }
+  return (
+    <button
+      type="button"
+      id={id}
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`wb-switch ${dims.track}`}
+      style={
+        {
+          '--wb-switch-thumb': `${dims.thumb}px`,
+          '--wb-switch-travel': `${dims.travel}px`,
+        } as React.CSSProperties
+      }
+      data-checked={checked ? 'true' : 'false'}
+    >
+      <span className="wb-switch-thumb" />
+    </button>
+  )
+}
+
 
 /** 确认对话框 */
 export function ConfirmDialog({

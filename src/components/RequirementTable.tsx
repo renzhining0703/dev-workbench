@@ -381,7 +381,7 @@ export function RequirementTable({
   // 表格最小宽度：以全列默认值（1160 / 批量模式 1200）为基准，
   // 隐藏带固定 min-w 的列时相应扣减，避免字段隐藏后仍强制横向滚动。
   const tableMinWidth = useMemo(() => {
-    let w = selectMode ? 1230 : 1190
+    let w = selectMode ? 1470 : 1430
     if (!showProjectBranch) w -= 330
     if (!showModule) w -= 180
     if (!showTime) w -= 340
@@ -841,7 +841,7 @@ export function RequirementTable({
                       </th>
                     )}
                     <th
-                      className="cursor-pointer select-none transition"
+                      className="cursor-pointer select-none transition min-w-[240px]"
                       onClick={() => toggleSort('name')}
                     >
                       <span className="inline-flex items-center gap-1">

@@ -115,12 +115,7 @@ export function AuthPage() {
   const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
-  // 跟随主题（AppRoot 未挂载时由本页兜底设置）
-  useEffect(() => {
-    const saved = localStorage.getItem('dev-workbench:theme')
-    const dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
-    document.documentElement.classList.toggle('dark', dark)
-  }, [])
+  // 主题由外层 ThemeProvider 统一应用（含「跟随系统」），本页不再重复设置
 
   // 探测注册是否需要邀请码
   useEffect(() => {

@@ -918,6 +918,10 @@ html.dark .wb-eyebrow { color: var(--wb-accent); }
 }
 .wb-btn-ghost:hover { border-color: var(--wb-brand-400); color: var(--wb-ink); background: var(--wb-surface-2); }
 .wb-btn-ghost svg { width: 14px; height: 14px; }
+/* 紧凑尺寸：设置中心等密集布局的次要操作按钮 */
+.wb-btn-primary.xs, .wb-btn-ghost.xs, .wb-btn-soft.xs {
+  padding: 5px 10px; font-size: 12px; border-radius: 8px;
+}
 .wb-btn-soft {
   display: inline-flex; align-items: center; gap: 6px;
   background: var(--wb-brand-500); color: #fff;
@@ -949,6 +953,85 @@ html.dark .wb-btn-soft { color: #EDF1EA; }
 }
 .wb-input::placeholder { color: var(--wb-ink-3); }
 .wb-input:focus { border-color: var(--wb-brand-500); box-shadow: 0 0 0 3px rgba(42,112,86,.13); }
+
+/* 开关（Switch）：尺寸由内联 --wb-switch-thumb / --wb-switch-travel 控制 */
+.wb-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-radius: 99px;
+  border: none;
+  padding: 2px;
+  background: var(--wb-line-2);
+  transition: background .18s ease;
+}
+.wb-switch[data-checked="true"] { background: var(--wb-brand-600); }
+.wb-switch:disabled { opacity: .45; cursor: not-allowed; }
+.wb-switch:focus-visible {
+  outline: 2px solid var(--wb-brand-500);
+  outline-offset: 2px;
+}
+.wb-switch .wb-switch-thumb {
+  display: block;
+  width: var(--wb-switch-thumb, 18px);
+  height: var(--wb-switch-thumb, 18px);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.28);
+  transform: translateX(0);
+  transition: transform .18s ease;
+}
+.wb-switch[data-checked="true"] .wb-switch-thumb {
+  transform: translateX(var(--wb-switch-travel, 18px));
+}
+
+/* 设置中心左侧分类导航 */
+.wb-set-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--wb-ink-2);
+  transition: background .15s, color .15s;
+}
+.wb-set-nav-item:hover { background: var(--wb-surface-2); color: var(--wb-ink); }
+.wb-set-nav-item.active {
+  background: var(--wb-brand-600);
+  color: #F6EFDF;
+  font-weight: 500;
+}
+.wb-set-nav-item.active:hover { background: var(--wb-brand-600); color: #F6EFDF; }
+
+/* 设置项分组卡片 */
+.wb-set-card {
+  border: 1px solid var(--wb-line);
+  border-radius: 14px;
+  background: var(--wb-surface);
+  overflow: hidden;
+}
+.wb-set-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--wb-line);
+}
+.wb-set-row:first-child { border-top: none; }
+/* 窄屏改为上下堆叠（右侧内容过宽时），sm 起恢复左右布局 */
+.wb-set-row.stack { flex-direction: column; align-items: flex-start; gap: 10px; }
+@media (min-width: 640px) {
+  .wb-set-row.stack { flex-direction: row; align-items: center; gap: 14px; }
+}
+
+/* 拖拽中的排序项 */
+.wb-drag-item.dragging { opacity: .5; }
+.wb-drag-item.drop-target { box-shadow: inset 0 0 0 1.5px var(--wb-brand-400); }
 
 .wb-chip {
   display: inline-flex; align-items: center; gap: 5px;

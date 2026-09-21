@@ -27,7 +27,11 @@ import type { MigratedRequirement } from '../lib/migrate'
 import { mergeByUpdatedAt } from '../lib/merge'
 import { active, gcTombstones } from '../lib/tombstone'
 import {
+  defaultFieldOrder,
+  loadFieldOrder,
   loadVisibleFields,
+  mergeFieldOrder,
+  saveFieldOrder,
   saveVisibleFields,
   type RequirementFieldKey,
   type VisibleFields,
@@ -68,6 +72,15 @@ interface Store {
   visibleStatuses: VisibleStatuses
   /** 切换某个需求状态的显隐（本地持久化，不云同步） */
   setVisibleStatus: (key: RequirementStatus, visible: boolean) => void
+  /**
+   * 需求列表的字段展示顺序（本地偏好，不云同步）。
+   * 只影响列表渲染（表格列 / 移动端卡片块），不影响表单与详情抽屉。
+   */
+  fieldOrder: RequirementFieldKey[]
+  /** 覆盖字段顺序（会做合法性校验，非法项被忽略、缺失项自动补齐） */
+  setFieldOrder: (order: RequirementFieldKey[]) => void
+  /** 恢复默认字段顺序 */
+  resetFieldOrder: () => void
   addRequirement: (draft: Omit<Requirement, 'id' | 'updatedAt'>) => void
   updateRequirement: (draft: Requirement) => void
   removeRequirement: (id: string) => void
@@ -153,6 +166,9 @@ export function StoreProvider({
   const [visibleStatuses, setVisibleStatusesState] = useState<VisibleStatuses>(() =>
     loadVisibleStatuses(),
   )
+  const [fieldOrder, setFieldOrderState] = useState<RequirementFieldKey[]>(() =>
+    loadFieldOrder(),
+  )
 
   const trigger = pushTrigger ?? noopPush
   const triggerRef = useRef(trigger)
@@ -173,6 +189,9 @@ export function StoreProvider({
       }
       if (e.key === 'dev-workbench:requirement-statuses') {
         setVisibleStatusesState(loadVisibleStatuses())
+      }
+      if (e.key === 'dev-workbench:requirement-field-order') {
+        setFieldOrderState(loadFieldOrder())
       }
     }
     window.addEventListener('storage', onStorage)
@@ -501,6 +520,20 @@ export function StoreProvider({
     })
   }, [])
 
+  /** 覆盖字段展示顺序（本地偏好，仅本设备，不云同步） */
+  const setFieldOrder = useCallback((order: RequirementFieldKey[]) => {
+    const next = mergeFieldOrder(order)
+    setFieldOrderState(next)
+    saveFieldOrder(next)
+  }, [])
+
+  /** 恢复默认字段顺序 */
+  const resetFieldOrder = useCallback(() => {
+    const next = defaultFieldOrder()
+    setFieldOrderState(next)
+    saveFieldOrder(next)
+  }, [])
+
   /**
    * 用服务端合并结果覆盖本地（由 sync 层调用）
    * 改用 LWW merge（不再 wholesale replace）：
@@ -576,6 +609,9 @@ export function StoreProvider({
       setVisibleField,
       visibleStatuses,
       setVisibleStatus,
+      fieldOrder,
+      setFieldOrder,
+      resetFieldOrder,
       addRequirement,
       updateRequirement,
       removeRequirement,
@@ -597,6 +633,7 @@ export function StoreProvider({
     [
       requirements, todos, projects, archiveMonths, getSyncData,
       visibleFields, setVisibleField, visibleStatuses, setVisibleStatus,
+      fieldOrder, setFieldOrder, resetFieldOrder,
       addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements,
       addTodo, toggleTodo, updateTodo, removeTodo,
       addProject, updateProject, removeProject,

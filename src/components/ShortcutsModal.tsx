@@ -1,17 +1,10 @@
 import { Modal } from './ui'
+import { SHORTCUTS, SHORTCUTS_FOOTNOTE } from '../lib/shortcuts'
 
 interface Props {
   open: boolean
   onClose: () => void
 }
-
-const SHORTCUTS: { keys: string[]; desc: string }[] = [
-  { keys: ['⌘K'], desc: '全局搜索 / 命令面板' },
-  { keys: ['N'], desc: '新建需求' },
-  { keys: ['/'], desc: '聚焦搜索框（需求列表页）' },
-  { keys: ['Esc'], desc: '关闭弹窗 / 抽屉' },
-  { keys: ['?'], desc: '打开快捷键面板' },
-]
 
 export function ShortcutsModal({ open, onClose }: Props) {
   return (
@@ -40,7 +33,7 @@ export function ShortcutsModal({ open, onClose }: Props) {
         ))}
       </div>
       <p className="mt-4 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
-        在输入框中编辑时快捷键自动禁用。
+        {SHORTCUTS_FOOTNOTE}
       </p>
     </Modal>
   )
