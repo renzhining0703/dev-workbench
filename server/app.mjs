@@ -81,7 +81,8 @@ export function createApp({ config, userStore, sessionStore, snapshotStore, push
       return res.status(400).json({ ok: false, error: 'payload too large' })
     }
     console.error('[server] handler error:', err)
-    return res.status(500).json({ ok: false, error: String(err?.message ?? err) })
+    // 500 一律返回通用文案：内部异常细节（含 SQLite 错误、文件路径等）只进日志，不下发客户端
+    return res.status(500).json({ ok: false, error: 'internal error' })
   })
 
   return app

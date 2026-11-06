@@ -9,6 +9,7 @@ import { RequirementKanban } from './components/RequirementKanban'
 import { ProjectManagerModal } from './components/ProjectManagerModal'
 import { PublishReminder, TodoPanel } from './components/TodoPanel'
 import { TodoView } from './components/TodoView'
+import { PasswordView } from './components/PasswordView'
 import { TodayHero } from './components/TodayHero'
 import { TodoSummaryReminder } from './components/TodoSummaryReminder'
 import { Logo } from './components/Logo'
@@ -34,7 +35,7 @@ import { hasProjectInitFlag, markProjectInit } from './lib/storage'
 import { seedProjects } from './data/seedProjects'
 import { startSync, type SyncHandle } from './lib/sync'
 
-type Tab = 'today' | 'todo' | 'list' | 'stats'
+type Tab = 'today' | 'todo' | 'list' | 'stats' | 'passwords'
 type ListView = 'table' | 'kanban'
 
 /** 首次启动自动导入历史数据的一次性标记（避免清空数据后又自动填回） */
@@ -225,6 +226,13 @@ function AppInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 启动时若未授权，主动请求（用于今日上线桌面提醒）
+  const showNotifyToast = useCallback((t: { tone: 'ok' | 'warn'; title: string; desc?: string }) => {
+    setNotifyToast(t)
+    if (notifyToastTimerRef.current !== null) window.clearTimeout(notifyToastTimerRef.current)
+    notifyToastTimerRef.current = window.setTimeout(() => setNotifyToast(null), 8000)
+  }, [])
+
   // 自动归档：启动时把已上线超过 N 个月的需求改为 archived
   // 用 store.archiveMonths（同步通道）而非 getArchiveMonths 直读
   // archiveRunRef 防止 StrictMode 或其他原因触发 remount 时重复跑
@@ -234,27 +242,33 @@ function AppInner({
 
     const months = store.archiveMonths
     const targets = findAutoArchiveTargets(store.requirements, months)
+    let archived = 0
+    let failed = 0
     for (const r of targets) {
-      store.updateRequirement({ ...r, status: 'archived' })
+      const res = store.updateRequirement({ ...r, status: 'archived' })
+      if (res.ok) archived += 1
+      else failed += 1
     }
-    if (targets.length > 0) {
-      setArchiveToast({ count: targets.length, months })
+    if (archived > 0) {
+      setArchiveToast({ count: archived, months })
+    }
+    if (failed > 0) {
+      showNotifyToast({
+        tone: 'warn',
+        title: `自动归档有 ${failed} 条失败`,
+        desc: '本地存储写入失败，详情见控制台',
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 启动时若未授权，主动请求（用于今日上线桌面提醒）
-  const showNotifyToast = useCallback((t: { tone: 'ok' | 'warn'; title: string; desc?: string }) => {
-    setNotifyToast(t)
-    if (notifyToastTimerRef.current !== null) window.clearTimeout(notifyToastTimerRef.current)
-    notifyToastTimerRef.current = window.setTimeout(() => setNotifyToast(null), 8000)
-  }, [])
-
   const handleSave = (draft: RequirementDraft) => {
-    if (editing) {
-      store.updateRequirement({ ...editing, ...draft })
-    } else {
-      store.addRequirement(draft)
+    const res = editing
+      ? store.updateRequirement({ ...editing, ...draft })
+      : store.addRequirement(draft)
+    if (!res.ok) {
+      showNotifyToast({ tone: 'warn', title: '保存失败', desc: res.error })
+      return
     }
     setFormOpen(false)
     setEditing(null)
@@ -271,41 +285,88 @@ function AppInner({
     (id: string, status: RequirementStatus) => {
       const target = store.requirements.find((r) => r.id === id)
       if (!target) return
-      store.updateRequirement({ ...target, status })
+      const res = store.updateRequirement({ ...target, status })
+      if (!res.ok) {
+        showNotifyToast({ tone: 'warn', title: '状态更新失败', desc: res.error })
+      }
     },
-    [store],
+    [store, showNotifyToast],
+  )
+
+  /**
+   * 切换某个「需求-项目」的上线状态（分批上线：同一需求多个项目各自上线）。
+   * 已上线 → 清空 publishedAt；未上线 → 写当前时间。
+   */
+  const handleToggleProjectPublished = useCallback(
+    (id: string, project: string) => {
+      const target = store.requirements.find((r) => r.id === id)
+      if (!target) return
+      const refs = target.projects ?? []
+      const next = refs.some((p) => p.project === project)
+        ? refs.map((p) =>
+            p.project === project
+              ? { ...p, publishedAt: p.publishedAt ? null : new Date().toISOString() }
+              : p,
+          )
+        : // 兜底：项目不在结构化数组里（脏数据），补一条并直接标记上线
+          [...refs, { project, publishModule: '', publishedAt: new Date().toISOString() }]
+      const res = store.updateRequirement({ ...target, projects: next })
+      if (!res.ok) {
+        showNotifyToast({ tone: 'warn', title: '上线状态更新失败', desc: res.error })
+      }
+    },
+    [store, showNotifyToast],
   )
 
   const handleDelete = useCallback(
     (id: string) => {
       const item = store.requirements.find((r) => r.id === id)
       if (!item) return
-      store.removeRequirement(id)
+      const res = store.removeRequirement(id)
+      if (!res.ok) {
+        showNotifyToast({ tone: 'warn', title: '删除失败', desc: res.error })
+        return
+      }
       setUndoToast({ label: item.name, items: [item] })
       if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current)
       undoTimerRef.current = window.setTimeout(() => setUndoToast(null), 5000)
     },
-    [store],
+    [store, showNotifyToast],
   )
 
   const handleBatchDelete = useCallback(
     (ids: string[]) => {
       const items = store.requirements.filter((r) => ids.includes(r.id))
       if (items.length === 0) return
-      ids.forEach((id) => store.removeRequirement(id))
-      setUndoToast({ label: `${items.length} 条需求`, items })
+      const deleted: Requirement[] = []
+      for (const id of ids) {
+        const res = store.removeRequirement(id)
+        if (res.ok) {
+          deleted.push(items.find((r) => r.id === id)!)
+        } else {
+          showNotifyToast({ tone: 'warn', title: '删除失败', desc: res.error })
+          break
+        }
+      }
+      if (deleted.length === 0) return
+      setUndoToast({ label: `${deleted.length} 条需求`, items: deleted })
       if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current)
       undoTimerRef.current = window.setTimeout(() => setUndoToast(null), 5000)
     },
-    [store],
+    [store, showNotifyToast],
   )
 
   const handleUndoDelete = useCallback(() => {
     if (!undoToast) return
-    undoToast.items.forEach((item) => store.restoreRequirement(item))
+    for (const item of undoToast.items) {
+      const res = store.restoreRequirement(item)
+      if (!res.ok) {
+        showNotifyToast({ tone: 'warn', title: '恢复失败', desc: res.error })
+      }
+    }
     setUndoToast(null)
     if (undoTimerRef.current) window.clearTimeout(undoTimerRef.current)
-  }, [undoToast, store])
+  }, [undoToast, store, showNotifyToast])
 
   /** 待办关联需求 → 跳转需求列表并打开抽屉（列表 Tab 下的表格/看板都切到表格视图，抽屉在表格里） */
   const jumpToRequirement = useCallback((reqId: string) => {
@@ -321,7 +382,11 @@ function AppInner({
   const handleAddTodoSubmit = useCallback(
     ({ content, date, priority }: { content: string; date: string; priority: TodoPriority }) => {
       if (!addTodoFor) return
-      store.addTodo(content, date, { requirementId: addTodoFor.id, priority })
+      const res = store.addTodo(content, date, { requirementId: addTodoFor.id, priority })
+      if (!res.ok) {
+        showNotifyToast({ tone: 'warn', title: '待办添加失败', desc: res.error })
+        return
+      }
       setAddTodoFor(null)
       showNotifyToast({
         tone: 'ok',
@@ -460,6 +525,7 @@ function AppInner({
                 ['todo', '待办'],
                 ['list', '需求列表'],
                 ['stats', '统计'],
+                ['passwords', '密码'],
               ] as [Tab, string][]
             ).map(([key, label]) => (
               <button
@@ -637,6 +703,7 @@ function AppInner({
               ['todo', '待办'],
               ['list', '需求列表'],
               ['stats', '统计'],
+              ['passwords', '密码'],
             ] as [Tab, string][]
           ).map(([key, label]) => (
             <button
@@ -729,6 +796,7 @@ function AppInner({
                 onDelete={handleDelete}
                 onBatchDelete={handleBatchDelete}
                 onStatusChange={handleStatusChange}
+                onToggleProjectPublished={handleToggleProjectPublished}
                 searchInputRef={searchInputRef}
                 externalOpenId={pendingReqId}
                 onExternalOpened={() => setPendingReqId(null)}
@@ -746,6 +814,8 @@ function AppInner({
               />
             )}
           </>
+        ) : tab === 'passwords' ? (
+          <PasswordView />
         ) : (
           <>
             <div className="wb-pills mb-4">

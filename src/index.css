@@ -1039,6 +1039,7 @@ html.dark .wb-btn-soft { color: #EDF1EA; }
   font-size: 11px; font-weight: 500;
 }
 .wb-chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+.wb-chip .chk { width: 9px; height: 9px; }
 
 /* 状态色（NOVA 去饱和版，可替换回原语义色） */
 .st-pending { color: var(--wb-ink-2); background: var(--wb-surface-2); }
@@ -1098,6 +1099,26 @@ html.dark .st-done { color: #2dd4bf; }
 .wb-code.branch { max-width: none; white-space: normal; word-break: break-all; }
 .wb-code.module { background: var(--wb-accent-soft); color: var(--wb-accent-600); }
 html.dark .wb-code.module { color: var(--wb-accent); }
+/* 已上线项目：绿色系（success 变量深浅主题各有一套，无需额外覆盖） */
+.wb-code.module.published { background: var(--wb-success-soft); color: var(--wb-success); }
+html.dark .wb-code.module.published { color: var(--wb-success); }
+
+/* -------- 项目维度上线状态（一个需求多项目分批上线） --------
+   区分手段 = 颜色 + 图标（对勾/空心点），不只依赖颜色，色弱也能辨认 */
+.wb-pm-row { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.wb-pm-toggle {
+  flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--wb-line-2); background: transparent;
+  color: var(--wb-ink-3); transition: color .15s, border-color .15s, background .15s;
+}
+.wb-pm-toggle:hover { border-color: var(--wb-success); color: var(--wb-success); }
+.wb-pm-toggle.on { background: var(--wb-success-soft); border-color: var(--wb-success); color: var(--wb-success); }
+.wb-pm-toggle .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.wb-pm-toggle .chk { width: 9px; height: 9px; }
+/* 项目名（列表「项目」列 / 看板卡片）：已上线绿色加粗感，未上线中性灰 */
+.wb-pm-name { color: var(--wb-ink-2); }
+.wb-pm-name.published { color: var(--wb-success); font-weight: 600; }
 
 /* 项目 / 分支 列（两行布局）：「项目: aaa、bbb、ccc(等N个)」+「分支: xxx」 */
 .wb-pb-line { display: flex; align-items: center; gap: 6px; min-width: 0; }

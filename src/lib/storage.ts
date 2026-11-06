@@ -1,9 +1,10 @@
-import type { Project, Requirement, TodoItem } from '../types'
+import type { PasswordEntry, Project, Requirement, TodoItem } from '../types'
 
 const REQ_KEY = 'dev-workbench:requirements'
 const TODO_KEY = 'dev-workbench:todos'
 const PROJ_KEY = 'dev-workbench:projects'
 const PROJ_INIT_KEY = 'dev-workbench:projects-initialized'
+const PASS_KEY = 'dev-workbench:passwords'
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -88,6 +89,16 @@ export function loadTodos(): TodoItem[] {
 
 export function saveTodos(list: TodoItem[]) {
   write(TODO_KEY, list)
+}
+
+/* ---------------- 密码仓储（存的是 enc 密文条目，localStorage 不落明文） ---------------- */
+
+export function loadPasswords(): PasswordEntry[] {
+  return read<PasswordEntry[]>(PASS_KEY, [])
+}
+
+export function savePasswords(list: PasswordEntry[]) {
+  write(PASS_KEY, list)
 }
 
 /* ---------------- 完整备份 ---------------- */

@@ -71,6 +71,36 @@ export interface StatusOption {
   color: string
 }
 
+/** 状态流转历史条目（随 Requirement 整体 LWW 同步，见 types 里 statusHistory） */
+export interface StatusHistoryItem {
+  status: RequirementStatus
+  at: string
+}
+
+/**
+ * 计算状态变更后的 statusHistory（纯函数）。
+ * - status 没变 → 原样返回既有历史（undefined 保持 undefined，不给老数据凭空造历史）
+ * - 首次变更且旧数据无历史 → 用「旧状态 @ updatedAt」补一个起点，再追加新状态
+ * - 正常情况 → 在既有历史后追加
+ */
+export function buildStatusHistory(
+  prev: {
+    status: RequirementStatus
+    statusHistory?: StatusHistoryItem[]
+    updatedAt?: string
+    createdAt?: string
+  },
+  nextStatus: RequirementStatus,
+  nowIso: string,
+): StatusHistoryItem[] | undefined {
+  if (prev.status === nextStatus) return prev.statusHistory
+  const base: StatusHistoryItem[] = prev.statusHistory
+    ? [...prev.statusHistory]
+    : [{ status: prev.status, at: prev.updatedAt ?? prev.createdAt ?? nowIso }]
+  base.push({ status: nextStatus, at: nowIso })
+  return base
+}
+
 /**
  * 生成可见状态的下拉选项（按 STATUS_FLOW 顺序）。
  * `include` 传当前值以保底展示：某状态被隐藏但其当前值仍在下拉里，

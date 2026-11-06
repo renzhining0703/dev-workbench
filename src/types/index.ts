@@ -12,12 +12,25 @@ export type RequirementStatus =
   | 'toConfirm' // 待确认
   | 'done' // 已完成
 
-/** 需求-项目关联：一个需求可涉及多个项目，每个项目各自的发布模块 */
+/** 需求-项目关联：一个需求可涉及多个项目，每个项目各自的发布模块与上线状态 */
 export interface RequirementProject {
   /** 项目名（对应项目库 Project.name） */
   project: string
   /** 发布模块：支持分模块发布的项目可填（如 make/、admin/），空 = 全量发布 */
   publishModule: string
+  /**
+   * 该项目单独的上线时间（ISO）；null / 缺省 = 尚未上线。
+   * 一个需求涉及多个项目时可能分批上线，故上线状态记在项目维度，
+   * 与需求整体的 status / publishTime 互不覆盖。
+   */
+  publishedAt?: string | null
+}
+
+/** 状态流转历史条目：状态每次变化追加一条（可选字段，老数据无此字段不迁移） */
+export interface StatusHistoryItem {
+  status: RequirementStatus
+  /** 变更时间 ISO */
+  at: string
 }
 
 /** 需求实体 */
@@ -38,8 +51,15 @@ export interface Requirement {
   projects: RequirementProject[]
   /** 代码分支 */
   branch: string
+  /** PRD 文档链接（飞书等）；机器人据此扫描 PRD 变更，可空 */
+  prdUrl?: string
   /** 当前状态 */
   status: RequirementStatus
+  /**
+   * 状态流转历史（append-only）。可选：上线前创建的老数据没有历史，
+   * 首次状态变更时由 lib/statuses.ts 的 buildStatusHistory 自动补起点。
+   */
+  statusHistory?: StatusHistoryItem[]
   /** 创建时间 */
   createdAt: string
   /** 开始时间 */
@@ -94,6 +114,47 @@ export interface Project {
   updatedAt?: string
   /** 软删除墓碑 ISO（同步协议：删除打墓碑参与 LWW 合并，UI 层过滤；超 90 天物理清理） */
   deletedAt?: string
+}
+
+/* ---------------- 密码管理 ---------------- */
+
+/**
+ * 密码条目的敏感字段（整体加密为 enc 密文，服务器/同步链路只见密文）。
+ * 加密：src/lib/cipher.ts（AES-GCM，主密码 PBKDF2 派生密钥）。
+ */
+export interface PasswordSecret {
+  username: string
+  password: string
+  notes: string
+}
+
+/** 密码条目（第四同步实体）：title/url/tags 明文，敏感字段整体密文 */
+export interface PasswordEntry {
+  id: string
+  /** 名称（搜索主键，明文同步） */
+  title: string
+  /** 网址（明文同步） */
+  url?: string
+  /** 标签（明文同步，平铺搜索用，替代分类） */
+  tags?: string[]
+  /**
+   * 敏感字段密文：base64(salt[16] || iv[12] || AES-GCM(JSON(PasswordSecret)))。
+   * 缺省 = 条目尚未加密落盘（理论不出现，容错视为空敏感字段）。
+   */
+  enc?: string
+  createdAt: string
+  updatedAt: string
+  /** 软删除墓碑 ISO（同步协议同其余实体） */
+  deletedAt?: string
+}
+
+/** 密码生成器选项（参考 passlock） */
+export interface GeneratorOptions {
+  length: number
+  uppercase: boolean
+  lowercase: boolean
+  numbers: boolean
+  symbols: boolean
 }
 
 export const STATUS_META: Record<

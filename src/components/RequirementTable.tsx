@@ -20,7 +20,7 @@ import {
   type TimeFieldKey,
 } from '../lib/fields'
 import { isStatusVisible, visibleStatusOptions } from '../lib/statuses'
-import { ConfirmDialog, EmptyState, SkeletonRows } from './ui'
+import { ConfirmDialog, EmptyState, ProjectPublishedDot, SkeletonRows } from './ui'
 import { Select } from './Select'
 import { RequirementDrawer } from './RequirementDrawer'
 import { AddTodoIconButton } from './AddTodoModal'
@@ -93,6 +93,11 @@ interface Props {
   onDelete: (id: string) => void
   onBatchDelete?: (ids: string[]) => void
   onStatusChange: (id: string, status: RequirementStatus) => void
+  /**
+   * 切换某个「需求-项目」的上线状态（分批上线：一个需求多个项目各自上线）。
+   * 未传时列表里的上线圆点只读、不可点击。
+   */
+  onToggleProjectPublished?: (id: string, project: string) => void
   /** 生成待办：仅「待开发 / 开发中」的需求展示入口；未传则整体隐藏 */
   onAddTodo?: (r: Requirement) => void
   /** requirementId → 已有关联待办条数（按钮角标） */
@@ -194,6 +199,7 @@ export function RequirementTable({
   onDelete,
   onBatchDelete,
   onStatusChange,
+  onToggleProjectPublished,
   onAddTodo,
   todoCounts,
   searchInputRef,
@@ -977,6 +983,7 @@ export function RequirementTable({
                                   keyword={keyword}
                                   copiedModule={copiedModule}
                                   onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
+                                  onTogglePublished={onToggleProjectPublished}
                                 />
                               </td>
                             )
@@ -1078,6 +1085,7 @@ export function RequirementTable({
                   onToggleSelect={() => toggleSelect(r.id)}
                   onCopyBranch={(b) => copyWithFeedback(b, setCopiedBranch)}
                   onCopyModule={(m) => copyWithFeedback(m, setCopiedModule)}
+                  onToggleProjectPublished={onToggleProjectPublished}
                   onOpenOverflow={(e) => {
                     overflowAnchorRef.current = e.currentTarget
                     // 同步算位置，避免 useEffect 跑完前闪到 (0,0)
@@ -1133,6 +1141,7 @@ export function RequirementTable({
         onClose={() => setDrawerId(null)}
         onEdit={(r) => { setDrawerId(null); onEdit(r) }}
         onStatusChange={onStatusChange}
+        onToggleProjectPublished={onToggleProjectPublished}
         onAddTodo={onAddTodo ? (r) => { setDrawerId(null); onAddTodo(r) } : undefined}
         todoCount={drawerReq ? (todoCounts?.get(drawerReq.id) ?? 0) : 0}
       />
@@ -1169,22 +1178,30 @@ export function RequirementTable({
                 全部项目（{requirementProjectNames(overflow.r).length}）
               </div>
               <div className="py-1">
-                {requirementProjectModules(overflow.r).map(({ project, module }) => (
+                {requirementProjectModules(overflow.r).map(({ project, module, publishedAt }) => (
                   <div
                     key={project}
                     className="flex items-center gap-2 px-3 py-1.5 text-xs"
                     style={{ color: 'var(--wb-ink-2)' }}
                   >
+                    <ProjectPublishedDot
+                      project={project}
+                      publishedAt={publishedAt}
+                      onToggle={
+                        onToggleProjectPublished
+                          ? () => onToggleProjectPublished(overflow.r.id, project)
+                          : undefined
+                      }
+                    />
                     <span
-                      className="min-w-0 flex-1 truncate"
-                      style={{ color: 'var(--wb-ink)' }}
+                      className={`wb-pm-name min-w-0 flex-1 truncate ${publishedAt ? 'published' : ''}`}
                       title={project}
                     >
                       {project}
                     </span>
                     <span
-                      className="wb-code module"
-                      style={{ maxWidth: 180 }}
+                      className={`wb-code module ${publishedAt ? 'published' : ''}`}
+                      style={{ maxWidth: 168 }}
                       title={module || '全量发布'}
                     >
                       {module || '全量'}
@@ -1224,7 +1241,10 @@ function ProjectBranchCell({
   onCopyBranch: (b: string) => void
   onOpenOverflow: (e: React.MouseEvent<HTMLButtonElement>) => void
 }) {
-  const names = requirementProjectNames(r)
+  const items = requirementProjectModules(r)
+  const names = items.map((i) => i.project)
+  /** 项目名 → 是否已上线（用于项目列文字上色） */
+  const publishedMap = new Map(items.map((i) => [i.project, !!i.publishedAt]))
   const overflow = names.length > PROJECT_OVERFLOW_THRESHOLD
   const shown = overflow ? names.slice(0, PROJECT_OVERFLOW_THRESHOLD) : names
   return (
@@ -1238,7 +1258,9 @@ function ProjectBranchCell({
                 {shown.map((n, i) => (
                   <span key={n}>
                     {i > 0 && <span style={{ opacity: 0.5 }}>、</span>}
-                    {highlight(n, keyword)}
+                    <span className={`wb-pm-name ${publishedMap.get(n) ? 'published' : ''}`}>
+                      {highlight(n, keyword)}
+                    </span>
                   </span>
                 ))}
               </span>
@@ -1291,18 +1313,22 @@ function ProjectBranchCell({
 
 /**
  * 「发布模块」单元格：每个项目一行「project: module」（空 module → 全量）。
- * 点击单行复制整行文本（"project: module"），保留 wb-code.module 颜色。
+ * - 行首圆点 = 该项目上线状态（分批上线场景：同一需求各项目可不同），点击可切换
+ * - 已上线：整行转 success 绿；未上线：沿用 accent 色（深浅主题各有一套变量）
+ * - 点击行本体复制整行文本（"project: module"）
  */
 function ModuleLines({
   r,
   keyword,
   copiedModule,
   onCopyModule,
+  onTogglePublished,
 }: {
   r: Requirement
   keyword: string
   copiedModule: string | null
   onCopyModule: (line: string) => void
+  onTogglePublished?: (id: string, project: string) => void
 }) {
   const items = requirementProjectModules(r)
   if (items.length === 0) {
@@ -1310,35 +1336,43 @@ function ModuleLines({
   }
   return (
     <div className="flex flex-col items-start gap-1">
-      {items.map(({ project, module }) => {
+      {items.map(({ project, module, publishedAt }) => {
         const lineLabel = formatProjectModuleLine(project, module)
         const isCopied = copiedModule === lineLabel
+        const published = !!publishedAt
         return (
-          <code
-            key={project}
-            onClick={(e) => {
-              e.stopPropagation()
-              onCopyModule(lineLabel)
-            }}
-            className="wb-code module"
-            style={
-              isCopied
-                ? { background: 'var(--wb-success-soft)', color: 'var(--wb-success)', fontWeight: 600 }
-                : undefined
-            }
-            title={`${lineLabel}（点击复制）`}
-          >
-            {isCopied ? (
-              '✓ 已复制'
-            ) : (
-              <>
-                {highlight(project, keyword)}:{' '}
-                <span style={{ opacity: module ? 1 : 0.75 }}>
-                  {highlight(module || '全量', keyword)}
-                </span>
-              </>
-            )}
-          </code>
+          <div key={project} className="wb-pm-row">
+            <ProjectPublishedDot
+              project={project}
+              publishedAt={publishedAt}
+              onToggle={onTogglePublished ? () => onTogglePublished(r.id, project) : undefined}
+            />
+            <code
+              onClick={(e) => {
+                e.stopPropagation()
+                onCopyModule(lineLabel)
+              }}
+              className={`wb-code module ${published ? 'published' : ''}`}
+              style={
+                isCopied
+                  ? // 复制反馈用品牌色（与「已上线」的 success 绿区分开，避免混淆）
+                    { background: BRAND_SOFT, color: 'var(--wb-brand-500)', fontWeight: 600 }
+                  : undefined
+              }
+              title={`${lineLabel}（点击复制）`}
+            >
+              {isCopied ? (
+                '✓ 已复制'
+              ) : (
+                <>
+                  {highlight(project, keyword)}:{' '}
+                  <span style={{ opacity: module ? 1 : 0.75 }}>
+                    {highlight(module || '全量', keyword)}
+                  </span>
+                </>
+              )}
+            </code>
+          </div>
         )
       })}
     </div>
@@ -1377,6 +1411,7 @@ function RequirementCard({
   onToggleSelect,
   onCopyBranch,
   onCopyModule,
+  onToggleProjectPublished,
   onOpenOverflow,
   onOpen,
   onEdit,
@@ -1398,6 +1433,7 @@ function RequirementCard({
   onToggleSelect: () => void
   onCopyBranch: (b: string) => void
   onCopyModule: (m: string) => void
+  onToggleProjectPublished?: (id: string, project: string) => void
   onOpenOverflow: (e: React.MouseEvent<HTMLButtonElement>) => void
   onOpen: () => void
   onEdit: () => void
@@ -1520,6 +1556,7 @@ function RequirementCard({
                 keyword={keyword}
                 copiedModule={copiedModule}
                 onCopyModule={onCopyModule}
+                onTogglePublished={onToggleProjectPublished}
               />
             </div>
           )

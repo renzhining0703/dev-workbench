@@ -3,7 +3,7 @@ import type { DragEvent } from 'react'
 import type { Requirement, RequirementStatus } from '../types'
 import { statusMeta } from '../types'
 import { fmtDateShort } from '../lib/utils'
-import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
+import { requirementModuleDisplay, requirementProjectDisplay, requirementProjectModules } from '../lib/projects'
 import { isVisible, type VisibleFields, type TimeFieldKey } from '../lib/fields'
 import { isStatusVisible } from '../lib/statuses'
 import { useStore } from '../store/StoreContext'
@@ -310,7 +310,13 @@ function KanbanCard({
           style={{ color: 'var(--wb-ink-2)' }}
           title={requirementProjectDisplay(r)}
         >
-          {requirementProjectDisplay(r)}
+          {/* 已上线项目标绿（分批上线场景，与列表「发布模块」列口径一致） */}
+          {requirementProjectModules(r).map((it, i) => (
+            <span key={it.project}>
+              {i > 0 && <span style={{ opacity: 0.5 }}> / </span>}
+              <span className={`wb-pm-name ${it.publishedAt ? 'published' : ''}`}>{it.project}</span>
+            </span>
+          ))}
         </div>
       )}
       {showBranch && r.branch && (

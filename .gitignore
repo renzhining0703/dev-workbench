@@ -9,3 +9,4 @@ dist
 server/data/
 # 本地覆盖的 env（含真实 token）
 .env*.local
+.codebase-knowledge/

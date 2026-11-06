@@ -3,10 +3,16 @@ import type { ReactNode } from 'react'
 import type { Requirement, RequirementStatus } from '../types'
 import { STATUS_FLOW, statusMeta } from '../types'
 import { fmtDate, isDateToday, copyToClipboard } from '../lib/utils'
-import { requirementModuleDisplay, requirementProjectDisplay } from '../lib/projects'
+import {
+  requirementModuleDisplay,
+  requirementProjectDisplay,
+  requirementProjectModules,
+  formatProjectModuleLine,
+} from '../lib/projects'
 import { isVisible, type TimeFieldKey } from '../lib/fields'
 import { isStatusVisible, visibleStatusOptions } from '../lib/statuses'
 import { useStore } from '../store/StoreContext'
+import { ProjectPublishedChip } from './ui'
 import { Select } from './Select'
 
 interface Props {
@@ -14,6 +20,8 @@ interface Props {
   onClose: () => void
   onEdit: (r: Requirement) => void
   onStatusChange: (id: string, status: RequirementStatus) => void
+  /** 切换某个「需求-项目」的上线状态（分批上线）；未传时上线标记只读 */
+  onToggleProjectPublished?: (id: string, project: string) => void
   /** 生成待办：仅「待开发 / 开发中」的需求展示入口；未传则隐藏 */
   onAddTodo?: (r: Requirement) => void
   /** 已有关联待办条数（按钮文案用） */
@@ -38,7 +46,15 @@ function FieldLabel({ children }: { children: ReactNode }) {
   )
 }
 
-export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange, onAddTodo, todoCount = 0 }: Props) {
+export function RequirementDrawer({
+  requirement,
+  onClose,
+  onEdit,
+  onStatusChange,
+  onToggleProjectPublished,
+  onAddTodo,
+  todoCount = 0,
+}: Props) {
   const { visibleFields, visibleStatuses } = useStore()
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
@@ -55,6 +71,8 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
   if (!requirement) return null
   const r = requirement
   const meta = statusMeta(r.status)
+  /** 每个项目的「项目: 模块 + 上线状态」；分批上线场景（>1 个项目）才单列展示 */
+  const projectItems = requirementProjectModules(r)
   // 状态流转只展示可见状态；当前状态即使被隐藏也保底展示（保持 active 标记不丢）
   const visibleFlow = STATUS_FLOW.filter((s) => isStatusVisible(visibleStatuses, s) || s === r.status)
 
@@ -154,6 +172,35 @@ export function RequirementDrawer({ requirement, onClose, onEdit, onStatusChange
                   onCopy={() => copyField('module', requirementModuleDisplay(r))}
                 />
               )}
+            </div>
+          )}
+
+          {/* 各项目上线状态：多项目分批上线时逐项标记（单项目时上方字段已足够，不再重复） */}
+          {projectItems.length > 1 && (
+            <div>
+              <FieldLabel>各项目上线状态</FieldLabel>
+              <div className="space-y-1.5">
+                {projectItems.map(({ project, module, publishedAt }) => (
+                  <div key={project} className="flex items-center gap-2">
+                    <span
+                      className="min-w-0 flex-1 truncate text-xs"
+                      style={{ color: 'var(--wb-ink)' }}
+                      title={formatProjectModuleLine(project, module)}
+                    >
+                      {formatProjectModuleLine(project, module)}
+                    </span>
+                    <ProjectPublishedChip
+                      project={project}
+                      publishedAt={publishedAt}
+                      onToggle={
+                        onToggleProjectPublished
+                          ? () => onToggleProjectPublished(r.id, project)
+                          : undefined
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

@@ -164,6 +164,118 @@ export function ConfirmDialog({
   )
 }
 
+/* -------- 项目维度上线状态（一个需求多项目分批上线） --------
+   区分手段 = 颜色 + 图标双通道：已上线 = 绿色实心对勾，未上线 = 灰色空心点。
+   不只依赖颜色，色弱用户也能辨认；配色走 success / surface 变量，深浅主题自适应。 */
+
+function PublishedGlyph({ published }: { published: boolean }) {
+  return published ? (
+    <svg
+      className="chk"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m4 10.5 3.6 3.6L16 6" />
+    </svg>
+  ) : (
+    <span className="dot" />
+  )
+}
+
+/** 上线状态标题文案（含日期与操作提示） */
+function publishedTitle(publishedAt: string | null | undefined, canToggle: boolean): string {
+  const published = !!publishedAt
+  const date = publishedAt ? publishedAt.slice(0, 10) : ''
+  if (!published) return canToggle ? '未上线，点击标记为已上线' : '未上线'
+  return `已上线${date ? `（${date}）` : ''}${canToggle ? '，点击标记为未上线' : ''}`
+}
+
+/**
+ * 紧凑圆点：列表「发布模块」列每行行首、项目溢出面板等窄空间。
+ * 传 onToggle → 可点击切换；否则只读展示（span，不进 Tab 焦点序列）。
+ */
+export function ProjectPublishedDot({
+  project,
+  publishedAt,
+  onToggle,
+}: {
+  project: string
+  publishedAt?: string | null
+  onToggle?: () => void
+}) {
+  const published = !!publishedAt
+  const glyph = <PublishedGlyph published={published} />
+  if (!onToggle) {
+    return (
+      <span className={`wb-pm-toggle ${published ? 'on' : ''}`} title={publishedTitle(publishedAt, false)}>
+        {glyph}
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      className={`wb-pm-toggle ${published ? 'on' : ''}`}
+      onClick={(e) => {
+        // 列表行/卡片整体可点击，这里必须阻止冒泡
+        e.stopPropagation()
+        onToggle()
+      }}
+      title={publishedTitle(publishedAt, true)}
+      aria-label={`${project} ${published ? '已上线' : '未上线'}`}
+      aria-pressed={published}
+    >
+      {glyph}
+    </button>
+  )
+}
+
+/**
+ * 圆点 + 文字的展开版：表单、抽屉等空间充裕处。
+ * 复用 wb-chip + st-published / st-pending 配色（深浅主题已有定义）。
+ */
+export function ProjectPublishedChip({
+  project,
+  publishedAt,
+  onToggle,
+}: {
+  project: string
+  publishedAt?: string | null
+  onToggle?: () => void
+}) {
+  const published = !!publishedAt
+  const inner = (
+    <>
+      <PublishedGlyph published={published} />
+      {published ? '已上线' : '未上线'}
+    </>
+  )
+  if (!onToggle) {
+    return (
+      <span className={`wb-chip shrink-0 ${published ? 'st-published' : 'st-pending'}`}>
+        {inner}
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      className={`wb-chip shrink-0 transition ${published ? 'st-published' : 'st-pending'}`}
+      onClick={onToggle}
+      title={publishedTitle(publishedAt, true)}
+      aria-label={`${project} ${published ? '已上线' : '未上线'}`}
+      aria-pressed={published}
+    >
+      {inner}
+    </button>
+  )
+}
+
 /** 空状态 */
 export function EmptyState({
   icon,

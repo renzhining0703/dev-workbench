@@ -8,12 +8,14 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Project, Requirement, RequirementStatus, TodoItem, TodoPriority } from '../types'
+import type { PasswordEntry, Project, Requirement, RequirementStatus, TodoItem, TodoPriority } from '../types'
 import { normalizeRequirement } from '../lib/projects'
 import {
+  loadPasswords,
   loadProjects,
   loadRequirements,
   loadTodos,
+  savePasswords,
   saveProjects,
   saveRequirements,
   saveTodos,
@@ -38,6 +40,7 @@ import {
   type VisibleFields,
 } from '../lib/fields'
 import {
+  buildStatusHistory,
   defaultVisibleStatuses,
   loadVisibleStatuses,
   saveVisibleStatuses,
@@ -67,6 +70,8 @@ interface Store {
   requirements: Requirement[]
   todos: TodoItem[]
   projects: Project[]
+  /** 密码条目（敏感字段已加密，墓碑已过滤） */
+  passwords: PasswordEntry[]
   /**
    * 同步层专用：完整数据（含墓碑）。
    * push 快照必须带墓碑，删除才能传播到服务端/其它设备；UI 禁用。
@@ -75,6 +80,7 @@ interface Store {
     requirements: Requirement[]
     todos: TodoItem[]
     projects: Project[]
+    passwords: PasswordEntry[]
     settings: { autoArchiveMonths: number; uiPrefs: UiPrefs }
   }
   /** 自动归档月份（同步通道） */
@@ -105,25 +111,29 @@ interface Store {
   applyRolePreset: (id: 'dev' | 'pm') => void
   /** 直接设置视角标记（用于选中「自定义」：保留当前配置，仅解除预设绑定） */
   setUiRole: (role: UiRole) => void
-  addRequirement: (draft: Omit<Requirement, 'id' | 'updatedAt'>) => void
-  updateRequirement: (draft: Requirement) => void
-  removeRequirement: (id: string) => void
+  addRequirement: (draft: Omit<Requirement, 'id' | 'updatedAt'>) => { ok: boolean; error?: string }
+  updateRequirement: (draft: Requirement) => { ok: boolean; error?: string }
+  removeRequirement: (id: string) => { ok: boolean; error?: string }
   /** 恢复已删除的需求（保留原始 id/createdAt，用于撤销删除） */
-  restoreRequirement: (item: Requirement) => void
+  restoreRequirement: (item: Requirement) => { ok: boolean; error?: string }
   /** 批量导入（id 去重合并），返回实际导入条数 */
   importRequirements: (items: MigratedRequirement[]) => number
   addTodo: (
     content: string,
     date: string,
     extra?: { priority?: TodoPriority; requirementId?: string },
-  ) => void
-  toggleTodo: (id: string) => void
+  ) => { ok: boolean; error?: string }
+  /** 密码条目：新增或整体覆盖（enc 密文由 UI 层用主密码加密后传入） */
+  upsertPassword: (entry: PasswordEntry) => { ok: boolean; error?: string }
+  /** 删除密码条目：打墓碑软删 */
+  removePassword: (id: string) => { ok: boolean; error?: string }
+  toggleTodo: (id: string) => { ok: boolean; error?: string }
   /** 编辑待办（内容 / 目标日期 / 优先级 / 关联需求）；done 变化时同步维护 completedAt */
   updateTodo: (
     id: string,
     patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done' | 'priority' | 'requirementId'>>,
-  ) => void
-  removeTodo: (id: string) => void
+  ) => { ok: boolean; error?: string }
+  removeTodo: (id: string) => { ok: boolean; error?: string }
   /** 项目库维护（名称去重），返回是否成功 */
   addProject: (name: string, moduleBased?: boolean) => { ok: boolean; error?: string }
   updateProject: (id: string, name: string, moduleBased?: boolean) => { ok: boolean; error?: string }
@@ -147,6 +157,7 @@ interface Store {
     requirements: Requirement[]
     todos: TodoItem[]
     projects: Project[]
+    passwords?: PasswordEntry[]
     settings?: { autoArchiveMonths?: number; uiPrefs?: unknown }
   }) => void
 }
@@ -181,6 +192,7 @@ export function StoreProvider({
   )
   const [todos, setTodos] = useState<TodoItem[]>(() => loadTodos())
   const [projects, setProjects] = useState<Project[]>(() => loadProjects())
+  const [passwords, setPasswords] = useState<PasswordEntry[]>(() => loadPasswords())
   const [archiveMonths, setArchiveMonthsState] = useState<number>(() =>
     getArchiveMonths(),
   )
@@ -201,6 +213,78 @@ export function StoreProvider({
   const triggerRef = useRef(trigger)
   triggerRef.current = trigger
 
+  // 当前状态的同步镜像：mutation 先算出 next（基于 ref 而非 setState updater），
+  // 再「落盘 → 更新 ref → setState」。保证 setState updater 是纯函数
+  //（StrictMode 不再双写 localStorage，配额满的 StorageError 也不会从 updater 里炸渲染）。
+  const requirementsRef = useRef(requirements)
+  requirementsRef.current = requirements
+  const todosRef = useRef(todos)
+  todosRef.current = todos
+  const projectsRef = useRef(projects)
+  projectsRef.current = projects
+  const passwordsRef = useRef(passwords)
+  passwordsRef.current = passwords
+
+  /** 统一提交需求集合：落盘（带错误捕获）→ 更新镜像 → setState → 触发 push */
+  function commitRequirements(next: Requirement[]): { ok: boolean; error?: string } {
+    try {
+      saveRequirements(next)
+    } catch (e) {
+      const msg = e instanceof StorageError ? e.message : '保存失败'
+      console.error('[store] 需求保存失败:', msg)
+      return { ok: false, error: msg }
+    }
+    requirementsRef.current = next
+    setRequirements(next)
+    triggerRef.current()
+    return { ok: true }
+  }
+
+  /** 统一提交待办集合：同上 */
+  function commitTodos(next: TodoItem[]): { ok: boolean; error?: string } {
+    try {
+      saveTodos(next)
+    } catch (e) {
+      const msg = e instanceof StorageError ? e.message : '保存失败'
+      console.error('[store] 待办保存失败:', msg)
+      return { ok: false, error: msg }
+    }
+    todosRef.current = next
+    setTodos(next)
+    triggerRef.current()
+    return { ok: true }
+  }
+
+  /** 统一提交项目集合：同上 */
+  function commitProjects(next: Project[]): { ok: boolean; error?: string } {
+    try {
+      saveProjects(next)
+    } catch (e) {
+      const msg = e instanceof StorageError ? e.message : '保存失败'
+      console.error('[store] 项目保存失败:', msg)
+      return { ok: false, error: msg }
+    }
+    projectsRef.current = next
+    setProjects(next)
+    triggerRef.current()
+    return { ok: true }
+  }
+
+  /** 统一提交密码集合：同上（列表内是含 enc 密文的条目） */
+  function commitPasswords(next: PasswordEntry[]): { ok: boolean; error?: string } {
+    try {
+      savePasswords(next)
+    } catch (e) {
+      const msg = e instanceof StorageError ? e.message : '保存失败'
+      console.error('[store] 密码保存失败:', msg)
+      return { ok: false, error: msg }
+    }
+    passwordsRef.current = next
+    setPasswords(next)
+    triggerRef.current()
+    return { ok: true }
+  }
+
   // 跨标签页同步（同 origin 内有效）
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
@@ -208,6 +292,7 @@ export function StoreProvider({
         setRequirements(loadRequirements().map(normalizeRequirement))
       if (e.key === 'dev-workbench:todos') setTodos(loadTodos())
       if (e.key === 'dev-workbench:projects') setProjects(loadProjects())
+      if (e.key === 'dev-workbench:passwords') setPasswords(loadPasswords())
       if (e.key === 'dev-workbench:auto-archive-months') {
         setArchiveMonthsState(getArchiveMonths())
       }
@@ -233,70 +318,60 @@ export function StoreProvider({
 
   const addRequirement = useCallback(
     (draft: Omit<Requirement, 'id' | 'updatedAt'>) => {
-      setRequirements((prev) => {
-        const item: Requirement = {
-          ...draft,
-          id: uid(),
-          updatedAt: nowISO(),
-        }
-        const next = [item, ...prev]
-        saveRequirements(next)
-        triggerRef.current()
-        return next
-      })
+      const t = nowISO()
+      const item: Requirement = {
+        ...draft,
+        id: uid(),
+        // 初始状态也记入历史（周报/流转统计的起点）
+        statusHistory: [{ status: draft.status, at: t }],
+        updatedAt: t,
+      }
+      return commitRequirements([item, ...requirementsRef.current])
     },
     [],
   )
 
   const updateRequirement = useCallback((draft: Requirement) => {
-    setRequirements((prev) => {
-      const next = prev.map((r) =>
-        r.id === draft.id ? { ...draft, updatedAt: nowISO() } : r,
-      )
-      saveRequirements(next)
-      triggerRef.current()
-      return next
+    const next = requirementsRef.current.map((r) => {
+      if (r.id !== draft.id) return r
+      const t = nowISO()
+      // 状态变化 → 追加流转历史（status 没变时 buildStatusHistory 原样返回，不产生噪音）
+      const history = buildStatusHistory(r, draft.status, t)
+      return { ...draft, statusHistory: history, updatedAt: t }
     })
+    return commitRequirements(next)
   }, [])
 
   /** 删除：打墓碑软删（同步协议需要墓碑传播删除；>90 天物理清理） */
   const removeRequirement = useCallback((id: string) => {
-    setRequirements((prev) => {
-      const t = nowISO()
-      const next = prev.map((r) =>
-        r.id === id ? { ...r, deletedAt: t, updatedAt: t } : r,
-      )
-      saveRequirements(next)
-      triggerRef.current()
-      return next
-    })
+    const t = nowISO()
+    const next = requirementsRef.current.map((r) =>
+      r.id === id ? { ...r, deletedAt: t, updatedAt: t } : r,
+    )
+    return commitRequirements(next)
   }, [])
 
   /** 恢复已删除的需求：优先复活墓碑（撤销删除场景），否则按新增插入 */
   const restoreRequirement = useCallback((item: Requirement) => {
-    setRequirements((prev) => {
-      const existing = prev.find((r) => r.id === item.id)
-      if (existing?.deletedAt) {
-        const t = nowISO()
-        const next = prev.map((r) =>
-          r.id === item.id ? { ...r, deletedAt: undefined, updatedAt: t } : r,
-        )
-        saveRequirements(next)
-        triggerRef.current()
-        return next
-      }
-      if (existing) return prev
-      const next = [item, ...prev]
-      saveRequirements(next)
-      triggerRef.current()
-      return next
-    })
+    const prev = requirementsRef.current
+    const existing = prev.find((r) => r.id === item.id)
+    if (existing && !existing.deletedAt) return { ok: true as const } // 已在且活跃，无需恢复
+    let next: Requirement[]
+    if (existing) {
+      const t = nowISO()
+      next = prev.map((r) =>
+        r.id === item.id ? { ...r, deletedAt: undefined, updatedAt: t } : r,
+      )
+    } else {
+      next = [item, ...prev]
+    }
+    return commitRequirements(next)
   }, [])
 
   /** 批量导入：按 id 去重合并，返回新增条数 */
   const importRequirements = useCallback(
     (items: MigratedRequirement[]): number => {
-      const existing = new Set(requirements.map((r) => r.id))
+      const existing = new Set(requirementsRef.current.map((r) => r.id))
       const fresh = items.filter((it) => !existing.has(it.id))
       if (fresh.length === 0) return 0
       const stamped = fresh
@@ -305,14 +380,30 @@ export function StoreProvider({
           updatedAt: it.updatedAt ?? it.createdAt ?? nowISO(),
         }))
         .map(normalizeRequirement) as Requirement[]
-      const next = [...stamped, ...requirements]
-      saveRequirements(next)
-      setRequirements(next)
-      triggerRef.current()
-      return fresh.length
+      const next = [...stamped, ...requirementsRef.current]
+      const res = commitRequirements(next)
+      return res.ok ? fresh.length : 0
     },
-    [requirements],
+    [],
   )
+
+  /** 密码条目：按 id 新增或整体覆盖（加密由 UI 层完成，这里只管持久化 + 触发同步） */
+  const upsertPassword = useCallback((entry: PasswordEntry) => {
+    const exists = passwordsRef.current.some((p) => p.id === entry.id)
+    const next = exists
+      ? passwordsRef.current.map((p) => (p.id === entry.id ? entry : p))
+      : [entry, ...passwordsRef.current]
+    return commitPasswords(next)
+  }, [])
+
+  /** 删除密码条目：打墓碑软删（同步协议同其余实体） */
+  const removePassword = useCallback((id: string) => {
+    const t = nowISO()
+    const next = passwordsRef.current.map((p) =>
+      p.id === id ? { ...p, deletedAt: t, updatedAt: t } : p,
+    )
+    return commitPasswords(next)
+  }, [])
 
   const addTodo = useCallback(
     (
@@ -320,44 +411,35 @@ export function StoreProvider({
       date: string,
       extra?: { priority?: TodoPriority; requirementId?: string },
     ) => {
-      setTodos((prev) => {
-        const t = nowISO()
-        const item: TodoItem = {
-          id: uid(),
-          content,
-          date,
-          done: false,
-          priority: extra?.priority ?? 'normal',
-          requirementId: extra?.requirementId,
-          createdAt: t,
-          updatedAt: t,
-        }
-        const next = [item, ...prev]
-        saveTodos(next)
-        triggerRef.current()
-        return next
-      })
+      const t = nowISO()
+      const item: TodoItem = {
+        id: uid(),
+        content,
+        date,
+        done: false,
+        priority: extra?.priority ?? 'normal',
+        requirementId: extra?.requirementId,
+        createdAt: t,
+        updatedAt: t,
+      }
+      return commitTodos([item, ...todosRef.current])
     },
     [],
   )
 
   const toggleTodo = useCallback((id: string) => {
-    setTodos((prev) => {
-      const next = prev.map((t) => {
-        if (t.id !== id) return t
-        const done = !t.done
-        return {
-          ...t,
-          done,
-          // 勾选时记录完成时间，取消勾选清除（历史/统计用）
-          completedAt: done ? nowISO() : undefined,
-          updatedAt: nowISO(),
-        }
-      })
-      saveTodos(next)
-      triggerRef.current()
-      return next
+    const next = todosRef.current.map((t) => {
+      if (t.id !== id) return t
+      const done = !t.done
+      return {
+        ...t,
+        done,
+        // 勾选时记录完成时间，取消勾选清除（历史/统计用）
+        completedAt: done ? nowISO() : undefined,
+        updatedAt: nowISO(),
+      }
     })
+    return commitTodos(next)
   }, [])
 
   /** 编辑待办：patch 内 done 变化时同步维护 completedAt */
@@ -366,37 +448,29 @@ export function StoreProvider({
       id: string,
       patch: Partial<Pick<TodoItem, 'content' | 'date' | 'done' | 'priority' | 'requirementId'>>,
     ) => {
-      setTodos((prev) => {
-        const next = prev.map((t) => {
-          if (t.id !== id) return t
-          const done = patch.done ?? t.done
-          const completedAt =
-            patch.done === undefined
-              ? t.completedAt
-              : done
-                ? (t.completedAt ?? nowISO())
-                : undefined
-          return { ...t, ...patch, done, completedAt, updatedAt: nowISO() }
-        })
-        saveTodos(next)
-        triggerRef.current()
-        return next
+      const next = todosRef.current.map((t) => {
+        if (t.id !== id) return t
+        const done = patch.done ?? t.done
+        const completedAt =
+          patch.done === undefined
+            ? t.completedAt
+            : done
+              ? (t.completedAt ?? nowISO())
+              : undefined
+        return { ...t, ...patch, done, completedAt, updatedAt: nowISO() }
       })
+      return commitTodos(next)
     },
     [],
   )
 
   /** 删除：打墓碑软删（同步协议需要墓碑传播删除；>90 天物理清理） */
   const removeTodo = useCallback((id: string) => {
-    setTodos((prev) => {
-      const t = nowISO()
-      const next = prev.map((x) =>
-        x.id === id ? { ...x, deletedAt: t, updatedAt: t } : x,
-      )
-      saveTodos(next)
-      triggerRef.current()
-      return next
-    })
+    const t = nowISO()
+    const next = todosRef.current.map((x) =>
+      x.id === id ? { ...x, deletedAt: t, updatedAt: t } : x,
+    )
+    return commitTodos(next)
   }, [])
 
   /** 项目名规范化（trim + 去重判断用） */
@@ -406,76 +480,49 @@ export function StoreProvider({
     (name: string, moduleBased?: boolean): { ok: boolean; error?: string } => {
       const n = normalizeName(name)
       if (!n) return { ok: false, error: '项目名为空' }
-      if (projects.some((p) => p.name.toLowerCase() === n.toLowerCase())) return { ok: false, error: '项目已存在' }
+      if (projectsRef.current.some((p) => p.name.toLowerCase() === n.toLowerCase())) return { ok: false, error: '项目已存在' }
       const t = nowISO()
       const next = [
-        ...projects,
+        ...projectsRef.current,
         { id: uid(), name: n, moduleBased: !!moduleBased, createdAt: t, updatedAt: t },
       ].sort((a, b) => a.name.localeCompare(b.name))
-      try {
-        saveProjects(next)
-      } catch (e) {
-        const msg = e instanceof StorageError ? e.message : '保存失败'
-        return { ok: false, error: msg }
-      }
-      setProjects(next)
-      triggerRef.current()
-      return { ok: true }
+      return commitProjects(next)
     },
-    [projects],
+    [],
   )
 
   const updateProject = useCallback(
     (id: string, name: string, moduleBased?: boolean): { ok: boolean; error?: string } => {
       const n = normalizeName(name)
       if (!n) return { ok: false, error: '项目名为空' }
-      if (projects.some((p) => p.id !== id && p.name.toLowerCase() === n.toLowerCase())) {
+      if (projectsRef.current.some((p) => p.id !== id && p.name.toLowerCase() === n.toLowerCase())) {
         return { ok: false, error: '与其他项目重复' }
       }
-      const next = projects
+      const next = projectsRef.current
         .map((p) =>
           p.id === id
             ? { ...p, name: n, moduleBased: moduleBased ?? p.moduleBased ?? false, updatedAt: nowISO() }
             : p,
         )
         .sort((a, b) => a.name.localeCompare(b.name))
-      try {
-        saveProjects(next)
-      } catch (e) {
-        const msg = e instanceof StorageError ? e.message : '保存失败'
-        return { ok: false, error: msg }
-      }
-      setProjects(next)
-      triggerRef.current()
-      return { ok: true }
+      return commitProjects(next)
     },
-    [projects],
+    [],
   )
 
   /** 删除：打墓碑软删（同步协议需要墓碑传播删除；>90 天物理清理） */
   const removeProject = useCallback((id: string): { ok: boolean; error?: string } => {
-    let result: { ok: boolean; error?: string } = { ok: true }
-    setProjects((prev) => {
-      const t = nowISO()
-      const next = prev.map((p) =>
-        p.id === id ? { ...p, deletedAt: t, updatedAt: t } : p,
-      )
-      try {
-        saveProjects(next)
-      } catch (e) {
-        result = { ok: false, error: e instanceof StorageError ? e.message : '删除失败' }
-        return prev
-      }
-      triggerRef.current()
-      return next
-    })
-    return result
+    const t = nowISO()
+    const next = projectsRef.current.map((p) =>
+      p.id === id ? { ...p, deletedAt: t, updatedAt: t } : p,
+    )
+    return commitProjects(next)
   }, [])
 
   /** 首次启动写入种子项目（只执行一次，由 App 调用） */
   const initProjects = useCallback(
     (seed: string[]): boolean => {
-      if (projects.length > 0) return false
+      if (projectsRef.current.length > 0) return false
       const t = nowISO()
       const next: Project[] = seed.map((name) => ({
         id: uid(),
@@ -483,12 +530,9 @@ export function StoreProvider({
         createdAt: t,
         updatedAt: t,
       }))
-      saveProjects(next)
-      setProjects(next)
-      triggerRef.current()
-      return true
+      return commitProjects(next).ok
     },
-    [projects.length],
+    [],
   )
 
   /** 从备份恢复：覆盖现有全部数据 */
@@ -518,6 +562,9 @@ export function StoreProvider({
       saveRequirements(gcReqs)
       saveTodos(gcTodos)
       saveProjects(gcProjs)
+      requirementsRef.current = gcReqs
+      todosRef.current = gcTodos
+      projectsRef.current = gcProjs
       setRequirements(gcReqs)
       setTodos(gcTodos)
       setProjects(gcProjs)
@@ -669,6 +716,7 @@ export function StoreProvider({
       requirements: Requirement[]
       todos: TodoItem[]
       projects: Project[]
+      passwords?: PasswordEntry[]
       settings?: { autoArchiveMonths?: number; uiPrefs?: unknown }
     }) => {
       // 云端数据统一规范化（旧快照可能缺 projects 字段），合并后清理超期墓碑
@@ -678,12 +726,20 @@ export function StoreProvider({
       ))
       const mergedTodos = gcTombstones(mergeByUpdatedAt(snap.todos, todos))
       const mergedProjects = gcTombstones(mergeByUpdatedAt(snap.projects, projects))
+      // 密码条目：旧服务端快照可能缺 passwords 字段，按空数组容错
+      const mergedPasswords = gcTombstones(mergeByUpdatedAt(snap.passwords ?? [], passwords))
       saveRequirements(mergedReqs)
       saveTodos(mergedTodos)
       saveProjects(mergedProjects)
+      savePasswords(mergedPasswords)
+      requirementsRef.current = mergedReqs
+      todosRef.current = mergedTodos
+      projectsRef.current = mergedProjects
+      passwordsRef.current = mergedPasswords
       setRequirements(mergedReqs)
       setTodos(mergedTodos)
       setProjects(mergedProjects)
+      setPasswords(mergedPasswords)
       if (snap.settings?.autoArchiveMonths != null) {
         const m = clampMonths(snap.settings.autoArchiveMonths)
         persistArchiveMonths(m)
@@ -695,7 +751,7 @@ export function StoreProvider({
         applyRemoteUiPrefs(remotePrefs)
       }
     },
-    [requirements, todos, projects, uiPrefsTs, applyRemoteUiPrefs],
+    [requirements, todos, projects, passwords, uiPrefsTs, applyRemoteUiPrefs],
   )
 
   /**
@@ -710,6 +766,7 @@ export function StoreProvider({
     localStorage.removeItem('dev-workbench:todos')
     localStorage.removeItem('dev-workbench:projects')
     localStorage.removeItem('dev-workbench:auto-archive-months')
+    localStorage.removeItem('dev-workbench:passwords')
     // 偏好三件套 + 角色 + 时间戳全部重置为默认
     const defFields = defaultVisibleFields()
     const defStatuses = defaultVisibleStatuses()
@@ -719,9 +776,14 @@ export function StoreProvider({
     saveFieldOrder(defOrder)
     saveUiRole('custom')
     saveUiPrefsTs(new Date(0).toISOString())
+    requirementsRef.current = []
+    todosRef.current = []
+    projectsRef.current = []
+    passwordsRef.current = []
     setRequirements([])
     setTodos([])
     setProjects([])
+    setPasswords([])
     setArchiveMonthsState(3)
     setVisibleFieldsState(defFields)
     setVisibleStatusesState(defStatuses)
@@ -736,6 +798,7 @@ export function StoreProvider({
       requirements,
       todos,
       projects,
+      passwords,
       settings: {
         autoArchiveMonths: archiveMonths,
         uiPrefs: {
@@ -747,7 +810,7 @@ export function StoreProvider({
         },
       },
     }),
-    [requirements, todos, projects, archiveMonths, uiPrefsTs, uiRole, visibleFields, visibleStatuses, fieldOrder],
+    [requirements, todos, projects, passwords, archiveMonths, uiPrefsTs, uiRole, visibleFields, visibleStatuses, fieldOrder],
   )
 
   const value = useMemo(
@@ -756,6 +819,7 @@ export function StoreProvider({
       requirements: active(requirements),
       todos: active(todos),
       projects: active(projects),
+      passwords: active(passwords),
       getSyncData,
       archiveMonths,
       visibleFields,
@@ -774,6 +838,8 @@ export function StoreProvider({
       restoreRequirement,
       importRequirements,
       addTodo,
+      upsertPassword,
+      removePassword,
       toggleTodo,
       updateTodo,
       removeTodo,
@@ -787,12 +853,12 @@ export function StoreProvider({
       clearAll,
     }),
     [
-      requirements, todos, projects, archiveMonths, getSyncData,
+      requirements, todos, projects, passwords, archiveMonths, getSyncData,
       visibleFields, setVisibleField, visibleStatuses, setVisibleStatus,
       fieldOrder, setFieldOrder, resetFieldOrder,
       uiRole, applyRolePreset, setUiRole, uiPrefsTs,
       addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements,
-      addTodo, toggleTodo, updateTodo, removeTodo,
+      addTodo, upsertPassword, removePassword, toggleTodo, updateTodo, removeTodo,
       addProject, updateProject, removeProject,
       initProjects, restoreAll, setArchiveMonths, applyRemote, clearAll,
     ],

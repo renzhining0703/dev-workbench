@@ -39,23 +39,29 @@ function extractSegmentModule(segment: string): string {
  * 旧格式需求 → 结构化多项目。
  * - project 含多个项目（逗号分隔脏数据）→ 拆成多条关联，括号说明作为该项目的发布模块
  * - 单项目 → 一条关联，继承原 publishModule（或括号说明）
+ * - 上线时间：旧数据没有项目维度上线标记，若需求整体已上线/已归档且有 publishTime，
+ *   则按该时间回填到每个项目（历史数据语义对齐，避免已上线需求显示成「未上线」）[我定的]
  */
 function migrateLegacyProjects(r: {
   project?: string
   publishModule?: string
+  status?: string
+  publishTime?: string | null
 }): RequirementProject[] {
   const raw = (r.project ?? '').trim()
   if (!raw) return []
   const segments = raw.split(/[;,，；]/).map((s) => s.trim()).filter(Boolean)
   const out: RequirementProject[] = []
   const seen = new Set<string>()
+  const legacyPublishedAt =
+    (r.status === 'published' || r.status === 'archived') && r.publishTime ? r.publishTime : null
   segments.forEach((seg, i) => {
     const [name] = extractProjectNames(seg)
     if (!name || seen.has(name)) return
     seen.add(name)
     // 括号说明优先；否则旧 publishModule 归给第一个项目
     const module = extractSegmentModule(seg) || (i === 0 ? (r.publishModule ?? '').trim() : '')
-    out.push({ project: name, publishModule: module })
+    out.push({ project: name, publishModule: module, publishedAt: legacyPublishedAt })
   })
   return out
 }
@@ -71,7 +77,12 @@ export function normalizeRequirement<T>(r: T): T & Requirement {
   let refs: RequirementProject[] = Array.isArray(rec.projects)
     ? rec.projects
         .filter((p): p is RequirementProject => !!p && typeof p.project === 'string')
-        .map((p) => ({ project: p.project.trim(), publishModule: (p.publishModule ?? '').trim() }))
+        .map((p) => ({
+          project: p.project.trim(),
+          publishModule: (p.publishModule ?? '').trim(),
+          // 上线时间：无值统一归一为 null（同步/旧数据兼容）
+          publishedAt: p.publishedAt ?? null,
+        }))
         .filter((p) => p.project.length > 0)
     : []
 
@@ -89,6 +100,8 @@ export function normalizeRequirement<T>(r: T): T & Requirement {
     refs = migrateLegacyProjects({
       project: rec.project,
       publishModule: rec.publishModule,
+      status: rec.status,
+      publishTime: rec.publishTime,
     })
   }
 
@@ -130,10 +143,16 @@ export function requirementModuleDisplay(r: {
   return r.publishModule ? r.publishModule : ''
 }
 
+/** 项目维度是否已上线：publishedAt 有值即视为已上线 */
+export function isProjectPublished(p: { publishedAt?: string | null }): boolean {
+  return !!p.publishedAt
+}
+
 /**
- * 每个项目一条独立的「项目 + 发布模块」结构（按需求的多项目数组逐项展开）。
+ * 每个项目一条独立的「项目 + 发布模块 + 上线状态」结构（按需求的多项目数组逐项展开）。
  * 用于：列表里每个项目单独成行、点击单行复制对应模块、溢出 popover 展示完整列表。
  * - 空模块 → 兜底显示 '全量'（与 requirementModuleDisplay 保持一致语义）
+ * - publishedAt 透传，供调用方按上线状态区分颜色
  * - 单项目且无发布模块 → 返回 [{ project, module: '' }]，由调用方决定是否降级展示
  * - 项目数组为空 → 返回 []（兼容旧结构：用兜底 project/publishModule 文本）
  */
@@ -141,11 +160,12 @@ export function requirementProjectModules(r: {
   project?: string
   publishModule?: string
   projects?: RequirementProject[]
-}): { project: string; module: string }[] {
+}): { project: string; module: string; publishedAt: string | null }[] {
   if (r.projects && r.projects.length > 0) {
     return r.projects.map((p) => ({
       project: p.project,
       module: p.publishModule || '',
+      publishedAt: p.publishedAt ?? null,
     }))
   }
   // 兜底：旧结构 / 未规范化数据；从 project 文本中拆出项目名、首个挂上 publishModule
@@ -155,6 +175,7 @@ export function requirementProjectModules(r: {
   return names.map((name, i) => ({
     project: name,
     module: i === 0 ? fallbackModule : '',
+    publishedAt: null,
   }))
 }
 

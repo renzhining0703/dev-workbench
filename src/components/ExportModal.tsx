@@ -31,10 +31,10 @@ export function ExportModal({
   const list = useMemo(() => filterByDevMonth(requirements, month), [requirements, month])
   const monthLabel = format(parse(month, 'yyyy-MM', new Date()), 'yyyy年M月')
 
-  /** 复制当月需求清单：表头 + 每行「需求名称\t开始时间」（tab 分隔，可直接粘 Excel） */
+  /** 复制当月需求清单：仅序号 + 需求名称，每行一条（如「1. xxx」） */
   function copyList() {
     if (list.length === 0) return
-    const lines = ['需求名称\t开始时间', ...list.map((r) => `${r.name}\t${fmtDate(r.devStartTime)}`)]
+    const lines = list.map((r, i) => `${i + 1}. ${r.name}`)
     const done = () => {
       setCopied(true)
       if (copyTimer.current) window.clearTimeout(copyTimer.current)
@@ -134,9 +134,9 @@ export function ExportModal({
         </p>
         {list.length > 0 && (
           <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
-            {list.map((r) => (
+            {list.map((r, i) => (
               <li key={r.id} className="flex items-center justify-between text-xs" style={{ color: 'var(--wb-ink-2)' }}>
-                <span className="truncate pr-2">{r.name}</span>
+                <span className="truncate pr-2">{i + 1}. {r.name}</span>
                 <span className="shrink-0">{fmtDate(r.devStartTime)}</span>
               </li>
             ))}

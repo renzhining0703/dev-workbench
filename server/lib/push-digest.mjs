@@ -68,3 +68,58 @@ export function buildPushDigest(snapshot, now = new Date()) {
     todoCount,
   }
 }
+
+/** ISO 时间 → 「MM-DD HH:mm」（无效值返回空串） */
+function formatTime(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+
+/**
+ * 详细版纯文本摘要（push-daily.mjs --print-digest 用，供外部投递渠道转发）。
+ * 在 buildPushDigest 的标题基础上，列出全部待上线需求（名称｜项目｜上线时间）
+ * 与今日待办（优先级标记 + 内容），全量不截断。
+ * @param {object} snapshot 服务端快照（normalize 后的结构）
+ * @param {Date} [now]
+ * @returns {string} 多行纯文本
+ */
+export function buildDigestText(snapshot, now = new Date()) {
+  const digest = buildPushDigest(snapshot, now)
+  const lines = [digest.title]
+
+  const alive = (x) => !x?.deletedAt
+  const ready = (snapshot.requirements ?? []).filter(
+    (r) => alive(r) && r.status === 'ready',
+  )
+  const openTodos = (snapshot.todos ?? []).filter(
+    (t) => alive(t) && t.date === localDateStr(now) && !t.done,
+  )
+
+  if (ready.length > 0) {
+    lines.push('', `【今日待上线 ${ready.length}】`)
+    for (const r of ready) {
+      const parts = [`· ${r.name}`]
+      const projects = (r.projects ?? [])
+        .map((p) => p?.project)
+        .filter(Boolean)
+      if (projects.length > 0) parts.push(projects.join('/'))
+      if (r.publishTime) {
+        const t = formatTime(r.publishTime)
+        if (t) parts.push(`上线 ${t}`)
+      }
+      lines.push(parts.join('｜'))
+    }
+  }
+
+  if (openTodos.length > 0) {
+    lines.push('', `【今日待办 ${openTodos.length}】`)
+    for (const t of openTodos) {
+      const flag = t.priority === 'high' ? '🔴' : ''
+      lines.push(`· ${flag}${t.content}`.trim())
+    }
+  }
+
+  lines.push('', `—— dev-workbench · ${localHumanDate(now)}`)
+  return lines.join('\n')
+}

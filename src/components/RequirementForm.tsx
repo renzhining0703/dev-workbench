@@ -5,7 +5,7 @@ import { useStore } from '../store/StoreContext'
 import { isVisible } from '../lib/fields'
 import { defaultVisibleStatuses, visibleStatusOptions } from '../lib/statuses'
 import { defaultStatusForNewRequirement } from '../lib/rolePresets'
-import { Modal } from './ui'
+import { Modal, ProjectPublishedChip } from './ui'
 import { Select } from './Select'
 
 export type RequirementDraft = Omit<Requirement, 'id' | 'updatedAt'>
@@ -19,6 +19,7 @@ const emptyDraft = (status: RequirementStatus, branch: string): RequirementDraft
   project: '',
   projects: [],
   branch,
+  prdUrl: '',
   publishModule: '',
   status,
   createdAt: new Date().toISOString(),
@@ -110,6 +111,7 @@ export function RequirementFormModal({
         project: initial.project,
         projects: initial.projects ?? [],
         branch: initial.branch,
+        prdUrl: initial.prdUrl ?? '',
         publishModule: initial.publishModule,
         status: initial.status,
         createdAt: initial.createdAt,
@@ -126,6 +128,8 @@ export function RequirementFormModal({
         project: prefill.project ?? '',
         projects: (prefill.projects ?? []).map((p) => ({ ...p })),
         branch: defaultBranch,
+        // 克隆复制 PRD 链接：副本通常指向同一份需求文档
+        prdUrl: prefill.prdUrl ?? '',
         publishModule: prefill.publishModule ?? '',
         status: defaultStatus,
         createdAt: new Date().toISOString(),
@@ -167,6 +171,15 @@ export function RequirementFormModal({
       projects: d.projects.map((x) => (x.project === name ? { ...x, publishModule: module } : x)),
     }))
   }
+  /** 切换某个项目的上线状态：未上线 → 记当前时间；已上线 → 清空（分批上线场景） */
+  const toggleProjectPublished = (name: string) => {
+    setDraft((d) => ({
+      ...d,
+      projects: d.projects.map((x) =>
+        x.project === name ? { ...x, publishedAt: x.publishedAt ? null : new Date().toISOString() } : x,
+      ),
+    }))
+  }
 
   const submit = () => {
     if (!valid) return
@@ -180,8 +193,11 @@ export function RequirementFormModal({
       projects: draft.projects.map((p) => ({
         project: p.project.trim(),
         publishModule: p.publishModule.trim(),
+        // 项目维度上线时间：未上线统一写 null（同步/旧版本兼容）
+        publishedAt: p.publishedAt ?? null,
       })),
       branch: draft.branch.trim(),
+      prdUrl: (draft.prdUrl ?? '').trim() || undefined,
       remark: draft.remark.trim(),
     })
   }
@@ -208,7 +224,9 @@ export function RequirementFormModal({
           <div className="sm:col-span-2">
             <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>
               所属项目
-              <span className="ml-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>一个需求可关联多个项目，各自指定发布方式</span>
+              <span className="ml-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+                一个需求可关联多个项目，各自指定发布方式与上线状态
+              </span>
             </label>
             <div className="space-y-2">
               {draft.projects.map((ref) => {
@@ -233,6 +251,12 @@ export function RequirementFormModal({
                         全量发布
                       </span>
                     )}
+                    {/* 项目维度上线标记：各项目可分批上线，点一下切换 */}
+                    <ProjectPublishedChip
+                      project={ref.project}
+                      publishedAt={ref.publishedAt}
+                      onToggle={() => toggleProjectPublished(ref.project)}
+                    />
                     <button
                       type="button"
                       className="shrink-0 rounded-md p-1 transition hover:bg-[var(--wb-surface-2)] hover:text-[var(--wb-danger)]"
@@ -273,6 +297,9 @@ export function RequirementFormModal({
             <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
               选项来自「项目管理」，可到顶栏维护；项目是否支持分模块发布也在那里配置
             </p>
+            <p className="mt-0.5 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+              多个项目分批上线时，点「未上线 / 已上线」单独标记各项目（已上线在列表里显示为绿色）
+            </p>
           </div>
         )}
 
@@ -290,6 +317,19 @@ export function RequirementFormModal({
             </p>
           </div>
         )}
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>PRD 链接</label>
+          <input
+            className="wb-input"
+            placeholder="如：https://xxx.feishu.cn/docs/…（可选）"
+            value={draft.prdUrl ?? ''}
+            onChange={(e) => set('prdUrl', e.target.value)}
+          />
+          <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+            飞书等需求文档链接；填写后机器人可每日扫描文档变更
+          </p>
+        </div>
 
         {isVisible(visibleFields, 'status') && (
           <div>

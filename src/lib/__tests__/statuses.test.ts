@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { STATUS_FLOW } from '../../types'
 import {
+  buildStatusHistory,
   defaultVisibleStatuses,
   mergeVisibleStatuses,
   isStatusVisible,
@@ -83,5 +84,49 @@ describe('visibleStatusOptions', () => {
     const statuses = mergeVisibleStatuses({ done: false }) as VisibleStatuses
     const options = visibleStatusOptions(statuses, 'done')
     expect(options.map((o) => o.value)).toContain('done')
+  })
+})
+
+describe('buildStatusHistory（状态流转历史）', () => {
+  const prevBase = {
+    status: 'developing' as const,
+    updatedAt: '2026-11-01T10:00:00.000Z',
+    createdAt: '2026-10-01T09:00:00.000Z',
+  }
+
+  it('status 没变 → 原样返回既有历史，不追加噪音', () => {
+    const existing = [{ status: 'developing' as const, at: '2026-10-20T00:00:00.000Z' }]
+    expect(buildStatusHistory({ ...prevBase, statusHistory: existing }, 'developing', 'now')).toBe(existing)
+  })
+
+  it('status 没变且无历史 → 保持 undefined（不给老数据造历史）', () => {
+    expect(buildStatusHistory(prevBase, 'developing', 'now')).toBeUndefined()
+  })
+
+  it('老数据首次变更：补「旧状态 @ updatedAt」起点 + 追加新状态', () => {
+    const out = buildStatusHistory(prevBase, 'testing', '2026-11-05T08:00:00.000Z')
+    expect(out).toEqual([
+      { status: 'developing', at: '2026-11-01T10:00:00.000Z' },
+      { status: 'testing', at: '2026-11-05T08:00:00.000Z' },
+    ])
+  })
+
+  it('老数据无 updatedAt → 起点降级 createdAt', () => {
+    const { updatedAt: _u, ...noUpdated } = prevBase
+    const out = buildStatusHistory(noUpdated, 'ready', '2026-11-05T08:00:00.000Z')
+    expect(out?.[0]).toEqual({ status: 'developing', at: '2026-10-01T09:00:00.000Z' })
+    expect(out).toHaveLength(2)
+  })
+
+  it('既有历史 → 直接追加，不覆盖', () => {
+    const existing = [
+      { status: 'pending' as const, at: '2026-10-01T09:00:00.000Z' },
+      { status: 'developing' as const, at: '2026-10-15T09:00:00.000Z' },
+    ]
+    const out = buildStatusHistory({ ...prevBase, statusHistory: existing }, 'ready', '2026-11-05T08:00:00.000Z')
+    expect(out).toEqual([
+      ...existing,
+      { status: 'ready', at: '2026-11-05T08:00:00.000Z' },
+    ])
   })
 })

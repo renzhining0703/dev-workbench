@@ -13,7 +13,7 @@
  *
  * 冲突策略：基于 updatedAt 的字段级 LWW；缺字段时降级 createdAt
  */
-import type { Project, Requirement, TodoItem } from '../types'
+import type { PasswordEntry, Project, Requirement, TodoItem } from '../types'
 import { SYNC_API, SYNC_ENABLED } from './syncConfig'
 import type { UiPrefs } from './uiPrefs'
 import { emitUnauthorized } from '../store/AuthContext'
@@ -43,6 +43,8 @@ export interface RemoteSnapshot {
   requirements: Requirement[]
   todos: TodoItem[]
   projects: Project[]
+  /** 密码条目（敏感字段已客户端加密，服务端只见密文）；旧服务端可能缺省 */
+  passwords?: PasswordEntry[]
   settings: SyncSettings
 }
 
@@ -50,6 +52,8 @@ export interface RemoteSnapshotInput {
   requirements: Requirement[]
   todos: TodoItem[]
   projects: Project[]
+  /** 旧服务端不识别该字段时会被忽略，不做兼容开关 */
+  passwords?: PasswordEntry[]
   settings: SyncSettings
   clientTs?: string
 }
@@ -59,6 +63,7 @@ interface Adapter {
     requirements: Requirement[]
     todos: TodoItem[]
     projects: Project[]
+    passwords?: PasswordEntry[]
     settings: SyncSettings
   }
   applyRemote: (snap: RemoteSnapshot) => void

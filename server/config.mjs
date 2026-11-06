@@ -103,5 +103,10 @@ export function loadConfig(env = process.env) {
     vapidPublicKey: (env.VAPID_PUBLIC_KEY ?? '').trim(),
     vapidPrivateKey: (env.VAPID_PRIVATE_KEY ?? '').trim(),
     vapidSubject: envOrDefault(env, 'VAPID_SUBJECT', 'mailto:dev@dev-workbench.local'),
+
+    // Server酱（推送到微信，https://sct.ftqq.com 微信扫码登录后获取 SendKey）
+    // 未配置时 push-daily 自动跳过该通道；APP_PUBLIC_URL 用于消息里的「打开应用」链接
+    serverchanSendKey: (env.SERVERCHAN_SENDKEY ?? '').trim(),
+    appPublicUrl: envOrDefault(env, 'APP_PUBLIC_URL', 'http://211.159.169.153/dev-workbench/'),
   }
 }

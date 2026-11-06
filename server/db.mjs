@@ -76,11 +76,21 @@ CREATE INDEX IF NOT EXISTS idx_push_subs_username ON push_subscriptions(username
 export function openDatabase(file) {
   mkdirSync(dirname(file), { recursive: true })
   const db = new DatabaseSync(file)
+  // busy_timeout 必须最先设置：push-daily / backup 等脚本会开第二个连接写库，
+  // WAL 下仍是单写者，默认 busy_timeout=0 时撞上主服务写入会立刻抛 SQLITE_BUSY
+  db.exec('PRAGMA busy_timeout = 5000')
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA foreign_keys = ON')
   migrate(db)
   return db
 }
+
+/** 每个版本一步：{ 版本号, 该步的 DDL } */
+const MIGRATION_STEPS = [
+  { version: 1, sql: SCHEMA_V1 },
+  { version: 2, sql: SCHEMA_V2 },
+  { version: 3, sql: SCHEMA_V3 },
+]
 
 function migrate(db) {
   const current = db.prepare('PRAGMA user_version').get().user_version
@@ -88,9 +98,20 @@ function migrate(db) {
   if (current > SCHEMA_VERSION) {
     throw new Error(`数据库 schema 版本 ${current} 比本程序支持的更高，请升级程序`)
   }
-  // 顺序升级：current=0 → v1；current=1 → v2；current=2 → v3；跳过已应用的版本
-  if (current < 1) db.exec(SCHEMA_V1)
-  if (current < 2) db.exec(SCHEMA_V2)
-  if (current < 3) db.exec(SCHEMA_V3)
-  db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+  // 顺序升级：每个版本独立事务，且在事务内立即推进 user_version。
+  // 不能攒到最后统一写版本号 —— 否则进程在「DDL 已执行、版本号未写」时中断
+  //（掉电/kill），重启会重跑非幂等 DDL（如 v2 的 ALTER TABLE ADD COLUMN）
+  // 抛 duplicate column，服务永久起不来。SQLite 的 DDL 可回滚，事务内执行是安全的。
+  for (const step of MIGRATION_STEPS) {
+    if (current >= step.version) continue
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.exec(step.sql)
+      db.exec(`PRAGMA user_version = ${step.version}`)
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
+    }
+  }
 }

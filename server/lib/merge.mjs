@@ -17,6 +17,7 @@ export function emptySnapshot() {
     requirements: [],
     todos: [],
     projects: [],
+    passwords: [],
     settings: { autoArchiveMonths: 3 },
   }
 }
@@ -105,6 +106,11 @@ export function mergeSnapshot(remote, body, nowIso = new Date().toISOString()) {
     projects: gcTombstones(mergeByUpdatedAt(
       Array.isArray(remote.projects) ? remote.projects : [],
       Array.isArray(body.projects) ? body.projects : [],
+    )),
+    // 密码条目：同 LWW + 墓碑 GC；内容是客户端加密的密文，服务端不感知明文
+    passwords: gcTombstones(mergeByUpdatedAt(
+      Array.isArray(remote.passwords) ? remote.passwords : [],
+      Array.isArray(body.passwords) ? body.passwords : [],
     )),
     settings: mergeSettings(remote.settings ?? {}, body.settings ?? {}),
   }
