@@ -69,7 +69,7 @@ test('push-digest：墓碑删除的需求不计入', () => {
   assert.equal(d.title, '📦 今日 1 项需求待上线')
 })
 
-test('push-digest：无待上线但今日有待办 → 待办标题；已完成/他日/墓碑待办不计入', () => {
+test('push-digest：无待上线但今日有待办 → 待办标题；已完成/墓碑待办不计入；顺延计数', () => {
   const now = new Date('2026-08-27T10:00:00')
   const today = localDateStr(now)
   const d = buildPushDigest(
@@ -85,7 +85,39 @@ test('push-digest：无待上线但今日有待办 → 待办标题；已完成/
     now,
   )
   assert.equal(d.todoCount, 1)
-  assert.equal(d.title, '📋 今日还有 1 条待办')
+  assert.equal(d.overdueCount, 1)
+  assert.equal(d.title, '📋 今日还有 1 条待办 · 顺延 1 条')
+})
+
+test('push-digest：顺延待办计入标题与延后场景', () => {
+  const now = new Date('2026-08-27T10:00:00')
+  // 今日无待办但有顺延 → 独立标题
+  const onlyOverdue = buildPushDigest(
+    { requirements: [], todos: [{ content: 'x', date: '2026-08-25', done: false }] },
+    now,
+  )
+  assert.equal(onlyOverdue.todoCount, 0)
+  assert.equal(onlyOverdue.overdueCount, 1)
+  assert.equal(onlyOverdue.title, '📋 有 1 条待办已顺延')
+
+  // 今日待上线需求 + 只有顺延待办 → 正文补充顺延提示
+  const withReady = buildPushDigest(
+    {
+      requirements: [{ name: '发布模块', status: 'ready' }],
+      todos: [{ content: 'x', date: '2026-08-25', done: false }],
+    },
+    now,
+  )
+  assert.ok(withReady.body.includes('另有顺延待办 1 条'))
+
+  // 未来日期的待办既不算今日也不算顺延
+  const future = buildPushDigest(
+    { requirements: [], todos: [{ content: 'x', date: '2026-08-28', done: false }] },
+    now,
+  )
+  assert.equal(future.todoCount, 0)
+  assert.equal(future.overdueCount, 0)
+  assert.equal(future.title, '☀️ 今日无待上线需求')
 })
 
 test('push-digest：今日待上线 + 未完成待办 → 正文合并提示', () => {
@@ -106,7 +138,92 @@ test('push-digest：全空 → 今日无待上线', () => {
   assert.equal(d.todoCount, 0)
 })
 
-/* ---------------- 2. /api/push/* 路由 ---------------- */
+/* ---------------- 1b. buildDigestText 待办三分类 ---------------- */
+
+import { buildDigestText, dayDiff } from '../lib/push-digest.mjs'
+
+test('digest-text：顺延待办收录并标注原定日期与延期天数', () => {
+  const now = new Date('2026-08-27T10:00:00')
+  const text = buildDigestText(
+    {
+      requirements: [],
+      todos: [
+        { content: '拖了两天的活', date: '2026-08-25', done: false },
+        { content: '拖了一天的活', date: '2026-08-26', priority: 'high', done: false },
+      ],
+    },
+    now,
+  )
+  assert.ok(text.includes('【顺延待办 2】'))
+  assert.ok(text.includes('原定 08-25，延 2 天'))
+  assert.ok(text.includes('原定 08-26，延 1 天'))
+  // 高优先级在前
+  assert.ok(text.indexOf('拖了一天的活') < text.indexOf('拖了两天的活'))
+})
+
+test('digest-text：无日期待办归入未排期', () => {
+  const now = new Date('2026-08-27T10:00:00')
+  const text = buildDigestText(
+    { requirements: [], todos: [{ content: '没排期的事', done: false }] },
+    now,
+  )
+  assert.ok(text.includes('【未排期 1】'))
+  assert.ok(text.includes('没排期的事'))
+  assert.ok(!text.includes('【顺延待办'))
+  assert.ok(!text.includes('【今日待办'))
+})
+
+test('digest-text：今日待办与顺延待办分段输出；已完成不出现', () => {
+  const now = new Date('2026-08-27T10:00:00')
+  const text = buildDigestText(
+    {
+      requirements: [],
+      todos: [
+        { content: '今天的活', date: '2026-08-27', done: false },
+        { content: '昨天的活', date: '2026-08-26', done: false },
+        { content: '干完的活', date: '2026-08-27', done: true },
+        { content: '删掉的活', date: '2026-08-26', done: false, deletedAt: '2026-08-01T00:00:00' },
+      ],
+    },
+    now,
+  )
+  assert.ok(text.includes('【今日待办 1】'))
+  assert.ok(text.includes('【顺延待办 1】'))
+  assert.ok(!text.includes('干完的活'))
+  assert.ok(!text.includes('删掉的活'))
+})
+
+test('digest-text：延期天数按原定日期而非 createdAt 计算', () => {
+  const now = new Date('2026-08-27T10:00:00')
+  // 创建于 11 天前，但原定日期是昨天 → 延 1 天
+  const text = buildDigestText(
+    {
+      requirements: [],
+      todos: [
+        {
+          content: '后补日期的事',
+          date: '2026-08-26',
+          createdAt: '2026-08-16T00:00:00',
+          done: false,
+        },
+      ],
+    },
+    now,
+  )
+  assert.ok(text.includes('原定 08-26，延 1 天'))
+  assert.ok(!text.includes('延 11 天'))
+})
+
+test('dayDiff：自然日差与无效输入', () => {
+  assert.equal(dayDiff('2026-08-27', '2026-08-25'), 2)
+  assert.equal(dayDiff('2026-08-25', '2026-08-27'), -2)
+  assert.equal(dayDiff('2026-09-01', '2026-08-31'), 1) // 跨月
+  assert.equal(dayDiff('2026-03-01', '2026-02-28'), 1) // 跨月（非闰年 2 月）
+  assert.equal(dayDiff('garbage', '2026-08-25'), null)
+  assert.equal(dayDiff('2026-08-27', undefined), null)
+})
+
+
 
 function setupServer({ vapid = false } = {}) {
   const tmp = mkdtempSync(join(tmpdir(), 'push-api-test-'))
