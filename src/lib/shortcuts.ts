@@ -13,6 +13,7 @@ export interface ShortcutItem {
 export const SHORTCUTS: ShortcutItem[] = [
   { keys: ['⌘K'], desc: '全局搜索 / 命令面板' },
   { keys: ['N'], desc: '新建需求' },
+  { keys: ['M'], desc: '打开密码管理' },
   { keys: ['/'], desc: '聚焦搜索框（需求列表页）' },
   { keys: ['Esc'], desc: '关闭弹窗 / 抽屉' },
   { keys: ['?'], desc: '打开快捷键面板' },

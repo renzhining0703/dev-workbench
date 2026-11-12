@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import type { Project, Requirement, TodoItem } from '../types'
 import { statusMeta } from '../types'
 
-export type PaletteTab = 'today' | 'todo' | 'list' | 'stats'
+export type PaletteTab = 'today' | 'todo' | 'list' | 'stats' | 'passwords'
 
 interface PaletteItem {
   id: string
@@ -74,6 +74,7 @@ const NAV_LABELS: Record<PaletteTab, string> = {
   todo: '待办',
   list: '需求列表',
   stats: '统计',
+  passwords: '密码管理',
 }
 
 export function CommandPalette({
@@ -121,12 +122,13 @@ export function CommandPalette({
         run: onNewRequirement,
       },
       ...(
-        ['today', 'todo', 'list', 'stats'] as PaletteTab[]
+        ['today', 'todo', 'list', 'stats', 'passwords'] as PaletteTab[]
       ).map((tab) => ({
         id: `act-nav-${tab}`,
         group: '操作',
         title: `前往${NAV_LABELS[tab]}`,
-        keywords: `go 前往 ${NAV_LABELS[tab]}`,
+        // 密码管理不在顶栏 Tab 中，补充英文/单键关键词便于命中
+        keywords: `go 前往 ${NAV_LABELS[tab]}${tab === 'passwords' ? ' password 密码库 m' : ''}`,
         icon: 'action' as const,
         run: () => onNavigate(tab),
       })),

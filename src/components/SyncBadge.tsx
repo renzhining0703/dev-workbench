@@ -21,23 +21,23 @@ const STATE_META: Record<
   { color: string; bg: string; label: string; spin?: boolean }
 > = {
   idle: {
-    color: 'text-emerald-300',
+    color: 'text-emerald-700 dark:text-emerald-300',
     bg: 'bg-emerald-500/15',
     label: '已同步',
   },
   syncing: {
-    color: 'text-sky-300',
+    color: 'text-sky-600 dark:text-sky-300',
     bg: 'bg-sky-500/15',
     label: '同步中…',
     spin: true,
   },
   offline: {
-    color: 'text-amber-300',
+    color: 'text-amber-700 dark:text-amber-300',
     bg: 'bg-amber-500/15',
     label: '离线',
   },
   error: {
-    color: 'text-rose-300',
+    color: 'text-rose-600 dark:text-rose-300',
     bg: 'bg-rose-500/15',
     label: '同步出错',
   },

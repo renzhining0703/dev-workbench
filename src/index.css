@@ -694,6 +694,36 @@
   --wb-heat-3: #96C6AC;
   --wb-heat-4: #5BA685;
   --wb-heat-5: #2E7D52;
+  /* 顶栏主题（浅色模式：米白底 + 深绿字，与页面同色系） */
+  --wb-header-bg: var(--wb-surface);
+  --wb-header-ink: var(--wb-ink);
+  --wb-header-ink-2: var(--wb-ink-2);
+  --wb-header-ink-3: var(--wb-ink-2);
+  --wb-header-icon-ink: #4B5651;
+  --wb-header-line: var(--wb-line);
+  --wb-header-line-strong: var(--wb-line-2);
+  --wb-header-chip-bg: var(--wb-surface-2);
+  --wb-header-chip-bg-2: var(--wb-bg-2);
+  --wb-header-mark-border: var(--wb-brand-700);
+  --wb-header-mark-ink: var(--wb-brand-700);
+  --wb-header-mark-bg: rgba(30,91,68,.06);
+  --wb-header-active-bg: var(--wb-brand-700);
+  --wb-header-active-ink: #F6EFDF;
+  --wb-header-active-shadow: 0 1px 2px rgba(22,33,29,.12);
+  --wb-header-mobile-active-bg: var(--wb-brand-700);
+  --wb-header-mobile-active-ink: #F6EFDF;
+  --wb-header-shadow: 0 1px 2px rgba(22,33,29,.05);
+  /* 今日概览卡：青瓷绿渐变（品牌绿提亮一档，轻快不压抑） */
+  --wb-hero-grad: linear-gradient(118deg, #15452F 0%, #1E5B44 55%, #2A7056 100%);
+  --wb-hero-glow-a: rgba(42,112,86,.28);
+  --wb-hero-glow-b: rgba(192,138,45,.14);
+  /* 主/次按钮统一品牌绿，金色只留作小面积点缀（头像、进度条等） */
+  --wb-cta-bg: var(--wb-brand-600);
+  --wb-cta-bg-hover: var(--wb-brand-500);
+  --wb-cta-ink: #F6EFDF;
+  --wb-soft-bg: var(--wb-brand-600);
+  --wb-soft-bg-hover: var(--wb-brand-500);
+  --wb-soft-ink: #FFFFFF;
   color-scheme: light;
 }
 html.dark {
@@ -732,6 +762,35 @@ html.dark {
   --wb-heat-3: #27563F;
   --wb-heat-4: #2E7D52;
   --wb-heat-5: #5BBF8A;
+  /* 顶栏主题（深色模式：沿用深绿品牌条） */
+  --wb-header-bg: #0A1712;
+  --wb-header-ink: #EDF1EA;
+  --wb-header-ink-2: rgba(237,241,234,.62);
+  --wb-header-ink-3: rgba(237,241,234,.55);
+  --wb-header-icon-ink: rgba(237,241,234,.8);
+  --wb-header-line: rgba(237,241,234,.1);
+  --wb-header-line-strong: rgba(237,241,234,.24);
+  --wb-header-chip-bg: rgba(237,241,234,.06);
+  --wb-header-chip-bg-2: rgba(237,241,234,.14);
+  --wb-header-mark-border: rgba(237,241,234,.85);
+  --wb-header-mark-ink: #F3E7CF;
+  --wb-header-mark-bg: rgba(237,241,234,.04);
+  --wb-header-active-bg: var(--wb-brand-700);
+  --wb-header-active-ink: #EDF1EA;
+  --wb-header-active-shadow: 0 1px 3px rgba(0,0,0,.25);
+  --wb-header-mobile-active-bg: rgba(237,241,234,.15);
+  --wb-header-mobile-active-ink: #EDF1EA;
+  --wb-header-shadow: none;
+  /* 深色模式沿用深绿 Hero 渐变，按钮与亮色主题统一为品牌绿 */
+  --wb-hero-grad: linear-gradient(120deg, var(--wb-brand-900), var(--wb-brand-700) 60%, var(--wb-brand-600));
+  --wb-hero-glow-a: rgba(42,112,86,.5);
+  --wb-hero-glow-b: rgba(192,138,45,.22);
+  --wb-cta-bg: var(--wb-brand-600);
+  --wb-cta-bg-hover: var(--wb-brand-500);
+  --wb-cta-ink: #EDF1EA;
+  --wb-soft-bg: var(--wb-brand-500);
+  --wb-soft-bg-hover: var(--wb-brand-400);
+  --wb-soft-ink: #EDF1EA;
   color-scheme: dark;
 }
 
@@ -775,15 +834,17 @@ input, select, textarea { font-family: inherit; }
 .theme-toggle:hover { background: rgba(237,241,234,.12); }
 
 /* ============================================================
-   顶部导航（NOVA：深绿品牌条）
+   顶部导航
+   浅色模式：米白底 + 深绿字，与页面同色系（深色只留 Hero 一处）
+   深色模式：沿用深绿品牌条
    ============================================================ */
 .wb-header {
   position: sticky; top: 32px; z-index: 40;
-  background: var(--wb-brand-900);
-  color: #EDF1EA;
-  border-bottom: 1px solid rgba(237,241,234,.08);
+  background: var(--wb-header-bg);
+  color: var(--wb-header-ink);
+  border-bottom: 1px solid var(--wb-header-line);
+  box-shadow: var(--wb-header-shadow);
 }
-html.dark .wb-header { background: #0A1712; }
 .wb-header-inner {
   max-width: 1100px; margin: 0 auto;
   display: flex; align-items: center; gap: 14px;
@@ -794,33 +855,36 @@ html.dark .wb-header { background: #0A1712; }
 }
 .wb-logo-mark {
   width: 34px; height: 34px; flex-shrink: 0;
-  border: 1.5px solid rgba(237,241,234,.85);
+  border: 1.5px solid var(--wb-header-mark-border);
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
-  color: #F3E7CF;
-  background: rgba(237,241,234,.04);
+  color: var(--wb-header-mark-ink);
+  background: var(--wb-header-mark-bg);
 }
 .wb-logo-mark svg { width: 17px; height: 17px; }
 .wb-logo-name { font-size: 15px; font-weight: 600; letter-spacing: .05em; white-space: nowrap; }
-.wb-logo-date { font-size: 10.5px; color: rgba(237,241,234,.55); margin-top: 1px; white-space: nowrap; }
+.wb-logo-date { font-size: 10.5px; color: var(--wb-header-ink-3); margin-top: 1px; white-space: nowrap; }
 
 .wb-nav {
   display: flex; align-items: center; gap: 2px;
   margin-left: 18px;
-  background: rgba(237,241,234,.07);
-  border: 1px solid rgba(237,241,234,.1);
+  background: var(--wb-header-chip-bg);
+  border: 1px solid var(--wb-header-line);
   border-radius: 12px; padding: 3px;
 }
 .wb-nav-btn {
-  border: none; background: transparent; color: rgba(237,241,234,.6);
+  border: none; background: transparent; color: var(--wb-header-ink-2);
   font-size: 13px; font-weight: 500;
   padding: 6px 14px; border-radius: 9px;
   transition: background .2s, color .2s;
   white-space: nowrap;
 }
-.wb-nav-btn:hover { color: #EDF1EA; }
-.wb-nav-btn.active { background: var(--wb-surface); color: var(--wb-brand-800); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
-html.dark .wb-nav-btn.active { background: var(--wb-brand-700); color: #EDF1EA; }
+.wb-nav-btn:hover { color: var(--wb-header-ink); }
+.wb-nav-btn.active {
+  background: var(--wb-header-active-bg);
+  color: var(--wb-header-active-ink);
+  box-shadow: var(--wb-header-active-shadow);
+}
 .wb-nav-btn.active .nav-dot { background: var(--wb-accent); }
 .nav-dot {
   display: inline-block; width: 5px; height: 5px; border-radius: 50%;
@@ -836,34 +900,33 @@ html.dark .wb-nav-btn.active { background: var(--wb-brand-700); color: #EDF1EA; 
 }
 .wb-btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
-  background: var(--wb-accent); color: #1A1408;
+  background: var(--wb-cta-bg); color: var(--wb-cta-ink);
   border: none; border-radius: 10px;
   font-size: 13px; font-weight: 600;
   padding: 8px 14px;
   transition: background .2s, transform .1s;
 }
-.wb-btn-primary:hover { background: #D39C3B; }
+.wb-btn-primary:hover { background: var(--wb-cta-bg-hover); }
 .wb-btn-primary:active { transform: translateY(1px); }
 .wb-btn-primary:disabled { opacity: .45; cursor: not-allowed; }
-.wb-btn-primary:disabled:hover { background: var(--wb-accent); transform: none; }
-html.dark .wb-btn-primary { color: #F6EFDF; }
+.wb-btn-primary:disabled:hover { background: var(--wb-cta-bg); transform: none; }
 .wb-icon-btn {
   width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
-  border: 1px solid rgba(237,241,234,.22);
-  background: rgba(237,241,234,.05);
-  color: rgba(237,241,234,.8);
+  border: 1px solid var(--wb-header-line-strong);
+  background: var(--wb-header-chip-bg);
+  color: var(--wb-header-icon-ink);
   border-radius: 10px;
   transition: background .2s;
 }
-.wb-icon-btn:hover { background: rgba(237,241,234,.14); }
+.wb-icon-btn:hover { background: var(--wb-header-chip-bg-2); }
 .wb-icon-btn svg { width: 16px; height: 16px; }
 .wb-avatar {
   display: flex; align-items: center; gap: 8px;
-  border: 1px solid rgba(237,241,234,.22);
-  background: rgba(237,241,234,.05);
+  border: 1px solid var(--wb-header-line-strong);
+  background: var(--wb-header-chip-bg);
   border-radius: 10px; padding: 4px 10px 4px 4px;
-  color: #EDF1EA; font-size: 12.5px;
+  color: var(--wb-header-ink); font-size: 12.5px;
 }
 .wb-avatar-badge {
   width: 26px; height: 26px; border-radius: 8px;
@@ -872,6 +935,40 @@ html.dark .wb-btn-primary { color: #F6EFDF; }
   font-size: 12px; font-weight: 700;
 }
 html.dark .wb-avatar-badge { color: #F6EFDF; }
+
+/* 顶栏内的搜索 / 登录 / 移动端 Tab（跟随顶栏主题，不写死黑白） */
+.wb-search-btn {
+  align-items: center; gap: 8px;
+  border: 1px solid var(--wb-header-line-strong);
+  background: var(--wb-header-chip-bg);
+  color: var(--wb-header-ink-2);
+  border-radius: 8px; padding: 6px 12px; font-size: 12px;
+  transition: background .2s, color .2s;
+}
+.wb-search-btn:hover { background: var(--wb-header-chip-bg-2); color: var(--wb-header-ink); }
+.wb-search-btn kbd {
+  border: 1px solid var(--wb-header-line-strong);
+  border-radius: 4px; padding: 0 4px;
+  font-size: 10px; line-height: 16px;
+}
+.wb-login-btn {
+  border: 1px solid var(--wb-header-line-strong);
+  background: transparent; color: var(--wb-header-ink);
+  border-radius: 8px; padding: 6px 12px;
+  font-size: 12px; font-weight: 500;
+  transition: background .2s;
+}
+.wb-login-btn:hover { background: var(--wb-header-chip-bg-2); }
+.wb-mobile-tabs { border-top: 1px solid var(--wb-header-line); }
+.wb-mobile-tab {
+  flex: 1; border: none; background: transparent;
+  color: var(--wb-header-ink-3);
+  border-radius: 8px; padding: 6px 12px;
+  font-size: 12px; font-weight: 500;
+  transition: background .2s, color .2s;
+}
+.wb-mobile-tab:hover { color: var(--wb-header-ink); }
+.wb-mobile-tab.active { background: var(--wb-header-mobile-active-bg); color: var(--wb-header-mobile-active-ink); }
 
 /* ============================================================
    布局
@@ -924,13 +1021,12 @@ html.dark .wb-eyebrow { color: var(--wb-accent); }
 }
 .wb-btn-soft {
   display: inline-flex; align-items: center; gap: 6px;
-  background: var(--wb-brand-500); color: #fff;
+  background: var(--wb-soft-bg); color: var(--wb-soft-ink);
   border: none; border-radius: 9px; padding: 7px 13px;
   font-size: 12.5px; font-weight: 600;
   transition: background .2s;
 }
-.wb-btn-soft:hover { background: var(--wb-brand-400); }
-html.dark .wb-btn-soft { color: #EDF1EA; }
+.wb-btn-soft:hover { background: var(--wb-soft-bg-hover); }
 .wb-btn-danger-soft {
   display: inline-flex; align-items: center; gap: 6px;
   background: var(--wb-danger-soft); color: var(--wb-danger);
@@ -1224,7 +1320,7 @@ html.dark .wb-pill.active { background: var(--wb-brand-500); }
 /* 今日概览 */
 .wb-hero {
   position: relative; overflow: hidden;
-  background: linear-gradient(120deg, var(--wb-brand-900), var(--wb-brand-700) 60%, var(--wb-brand-600));
+  background: var(--wb-hero-grad);
   border-radius: 20px;
   color: #EDF1EA;
   padding: 26px 28px;
@@ -1234,23 +1330,23 @@ html.dark .wb-pill.active { background: var(--wb-brand-500); }
 .wb-hero::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background:
-    radial-gradient(600px 300px at 88% -20%, rgba(42,112,86,.5), transparent 60%),
-    radial-gradient(500px 300px at -5% 120%, rgba(192,138,45,.22), transparent 55%);
+    radial-gradient(600px 300px at 88% -20%, var(--wb-hero-glow-a), transparent 60%),
+    radial-gradient(500px 300px at -5% 120%, var(--wb-hero-glow-b), transparent 55%);
 }
 .wb-hero-inner { position: relative; z-index: 1; display: flex; align-items: center; gap: 24px; }
 .wb-hero-main { flex: 1; min-width: 0; }
 .wb-hero h2 { font-family: var(--wb-serif); font-size: 24px; font-weight: 500; line-height: 1.25; }
 .wb-hero h2 em { font-style: italic; color: #E8C87E; }
-.wb-hero p { font-size: 12.5px; color: rgba(237,241,234,.66); margin-top: 6px; }
-.wb-hero-date { font-size: 11px; letter-spacing: .1em; color: rgba(237,241,234,.5); text-transform: uppercase; }
+.wb-hero p { font-size: 12.5px; color: rgba(237,241,234,.74); margin-top: 6px; }
+.wb-hero-date { font-size: 11px; letter-spacing: .1em; color: rgba(237,241,234,.62); text-transform: uppercase; }
 .wb-hero-stats { display: flex; gap: 28px; margin-left: auto; flex-shrink: 0; }
 .wb-hero-stat { text-align: right; }
 .wb-hero-stat strong { display: block; font-family: var(--wb-serif); font-size: 26px; font-weight: 500; color: #F3E7CF; font-variant-numeric: tabular-nums; }
-.wb-hero-stat span { font-size: 11px; color: rgba(237,241,234,.55); }
+.wb-hero-stat span { font-size: 11px; color: rgba(237,241,234,.68); }
 .wb-hero-progress { width: 100%; margin-top: 18px; position: relative; z-index: 1; }
-.wb-hero-progress .bar { height: 4px; border-radius: 99px; background: rgba(237,241,234,.14); overflow: hidden; }
+.wb-hero-progress .bar { height: 4px; border-radius: 99px; background: rgba(237,241,234,.22); overflow: hidden; }
 .wb-hero-progress .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--wb-accent), #E8C87E); }
-.wb-hero-progress .meta { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11px; color: rgba(237,241,234,.6); }
+.wb-hero-progress .meta { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11px; color: rgba(237,241,234,.7); }
 @media (max-width: 640px) {
   .wb-hero { padding: 20px; border-radius: 16px; }
   .wb-hero-inner { flex-wrap: wrap; gap: 18px; }

@@ -410,7 +410,7 @@ function AppInner({
     setPaletteOpen(false)
   }, [])
 
-  // 全局键盘快捷键：⌘K 命令面板、N 新建需求、/ 聚焦搜索、? 快捷键面板
+  // 全局键盘快捷键：⌘K 命令面板、N 新建需求、M 密码管理、/ 聚焦搜索、? 快捷键面板
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // ⌘K / Ctrl+K：打开或关闭命令面板（输入框内也生效）
@@ -431,6 +431,9 @@ function AppInner({
         e.preventDefault()
         setEditing(null)
         setFormOpen(true)
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault()
+        setTab('passwords')
       } else if (e.key === '/' && tab === 'list') {
         e.preventDefault()
         searchInputRef.current?.focus()
@@ -525,7 +528,6 @@ function AppInner({
                 ['todo', '待办'],
                 ['list', '需求列表'],
                 ['stats', '统计'],
-                ['passwords', '密码'],
               ] as [Tab, string][]
             ).map(([key, label]) => (
               <button
@@ -543,7 +545,7 @@ function AppInner({
             {/* 全局搜索（⌘K）——PC 显示文字按钮，移动端图标 */}
             <button
               onClick={() => setPaletteOpen(true)}
-              className="hidden items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs text-white/75 transition hover:bg-white/10 hover:text-white md:flex"
+              className="wb-search-btn hidden md:flex"
               aria-label="全局搜索"
               title="全局搜索（⌘K）"
             >
@@ -552,7 +554,7 @@ function AppInner({
                 <path d="m21 21-4.35-4.35" />
               </svg>
               搜索
-              <kbd className="rounded border border-white/25 px-1 text-[10px] leading-4">⌘K</kbd>
+              <kbd>⌘K</kbd>
             </button>
             <button
               onClick={() => setPaletteOpen(true)}
@@ -634,6 +636,17 @@ function AppInner({
                       </svg>
                       项目管理
                     </button>
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
+                      style={{ color: 'var(--wb-ink-2)' }}
+                      onClick={() => { setMobileMenuOpen(false); setTab('passwords') }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      密码管理
+                    </button>
                     <div className="my-1 border-t" style={{ borderColor: 'var(--wb-line)' }} />
                     <button
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition hover:bg-[var(--wb-surface-2)]"
@@ -668,7 +681,7 @@ function AppInner({
             ) : (
               <button
                 onClick={() => auth.showLogin('login')}
-                className="rounded-lg border border-white/25 px-3 py-1.5 text-xs font-medium text-white/90 transition hover:bg-white/10"
+                className="wb-login-btn"
                 aria-label="登录"
               >
                 登录
@@ -696,24 +709,19 @@ function AppInner({
         </div>
 
         {/* 移动端 Tab 栏 */}
-        <div className="flex gap-1 border-t border-white/10 px-3 py-1.5 sm:hidden">
+        <div className="wb-mobile-tabs flex gap-1 px-3 py-1.5 sm:hidden">
           {(
             [
               ['today', '今日概览'],
               ['todo', '待办'],
               ['list', '需求列表'],
               ['stats', '统计'],
-              ['passwords', '密码'],
             ] as [Tab, string][]
           ).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                tab === key
-                  ? 'bg-white/15 text-white'
-                  : 'text-white/55 hover:text-white/85'
-              }`}
+              className={`wb-mobile-tab ${tab === key ? 'active' : ''}`}
             >
               {label}
             </button>
