@@ -33,7 +33,13 @@ const cfg = loadConfig(env)
 const db = openDatabase(cfg.dbFile)
 const store = new SnapshotStore(db)
 
-const username = (getFlag('user') ?? (env.PASSWORD_USER ?? 'renzhining')).trim()
+// --user 必填：多用户环境下静默兜底会把待办写错人
+const userFlag = getFlag('user')
+if (!userFlag || !userFlag.trim()) {
+  db.close()
+  fail('ERR: --user required（必须显式指定用户名，禁止默认写入）')
+}
+const username = userFlag.trim()
 
 // ③ user 必须先存在，否则 exit 1（避免 update 静默建孤儿快照）
 const userRow = db.prepare('SELECT username FROM users WHERE username = ?').get(username)

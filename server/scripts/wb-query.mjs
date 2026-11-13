@@ -1,7 +1,8 @@
 /**
  * 工作台结构化数据导出（供 OpenClaw 周报/月报/日报/答疑消费）
  *
- * 用法：node --no-warnings scripts/wb-query.mjs [--user <用户名>] [--pretty]
+ * 用法：node --no-warnings scripts/wb-query.mjs --user <用户名> [--pretty]
+ *   --user 必填：多用户环境下禁止默认取数（缺失即报错，不做任何静默兜底）
  * 输出：stdout 一个 JSON 对象（exit 0）：
  *   {
  *     user, exportedAt,
@@ -23,10 +24,15 @@ import { SnapshotStore } from '../store/snapshots.mjs'
 
 const argv = process.argv.slice(2)
 const userFlagIdx = argv.indexOf('--user')
+// --user 必填：多用户环境下静默兜底会把同事的数据当成 owner 的（反之亦然）
 const user =
   userFlagIdx !== -1 && argv[userFlagIdx + 1] && !argv[userFlagIdx + 1].startsWith('-')
-    ? argv[userFlagIdx + 1]
-    : ((loadServerEnv().PASSWORD_USER ?? 'renzhining').trim())
+    ? argv[userFlagIdx + 1].trim()
+    : null
+if (!user) {
+  console.error('ERR: --user required（必须显式指定用户名，禁止默认取数）')
+  process.exit(1)
+}
 const pretty = argv.includes('--pretty')
 
 const env = loadServerEnv()

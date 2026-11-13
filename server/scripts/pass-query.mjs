@@ -1,13 +1,12 @@
 /**
  * 密码查询脚本（供 OpenClaw 小龙虾接企微问答调用）
  *
- * 用法：node --no-warnings scripts/pass-query.mjs <关键词>
- *   关键词匹配：名称 / 网址 / 标签 / 用户名 / 备注（大小写不敏感，多关键词 AND）
- * 输出：匹配条目的纯文本（含解密后的用户名/密码/备注），无匹配输出提示并 exit 2
- *
  * 前置：data/env.local 配置
  *   PASSWORD_MASTER=<主密码>   ← 与浏览器端解锁用同一个；忘了 = 数据永久解不开
- *   PASSWORD_USER=<用户名>     ← 缺省 renzhining
+ *
+ * 用法：node --no-warnings scripts/pass-query.mjs --user <用户名> <关键词>
+ *   --user 必填且必须与 env.local 的 PASSWORD_USER 一致（owner 白名单，脚本层硬校验），
+ *   与机器人层身份判定构成双层防线；密码查询仅限账号所有者
  *
  * 安全边界：本脚本输出明文密码，仅供服务器上的可信调用方使用；
  *           不要把 stdout 转发到不可信渠道。
@@ -17,18 +16,35 @@ import { openDatabase } from '../db.mjs'
 import { SnapshotStore } from '../store/snapshots.mjs'
 import { decryptJson, CipherError } from '../lib/cipher.mjs'
 
-const args = process.argv.slice(2).filter((a) => !a.startsWith('-'))
+// --user 必填：多用户环境下静默兜底 = 同事一句话就能查到 owner 的密码，绝不允许
+const argv = process.argv.slice(2)
+const userFlagIdx = argv.indexOf('--user')
+const userFlag = userFlagIdx !== -1 ? argv[userFlagIdx + 1] : undefined
+if (!userFlag || userFlag.startsWith('-') || !userFlag.trim()) {
+  console.error('ERR: --user required（密码查询必须显式指定用户名，且仅限账号所有者）')
+  process.exit(1)
+}
+const user = userFlag.trim()
+// 关键词 = 非选项参数，剔除 --user 及其值
+const args = argv.filter((a, i) => !a.startsWith('-') && i !== userFlagIdx + 1)
 const keyword = args.join(' ').trim().toLowerCase()
 
 if (!keyword) {
-  console.error('[pass-query] 用法：node scripts/pass-query.mjs <关键词>')
+  console.error('[pass-query] 用法：node scripts/pass-query.mjs --user <用户名> <关键词>')
   process.exit(1)
 }
 
 const env = loadServerEnv()
 const cfg = loadConfig(env)
+
+// owner 白名单：只允许 PASSWORD_USER 指定的账号查密码（机器层硬校验，不依赖调用方自律）
+const allowedUser = (env.PASSWORD_USER ?? '').trim()
+if (!allowedUser || user !== allowedUser) {
+  console.error('ERR: 密码查询仅限账号所有者（--user 必须与 PASSWORD_USER 配置一致）')
+  process.exit(1)
+}
+
 const master = (env.PASSWORD_MASTER ?? '').trim()
-const user = (env.PASSWORD_USER ?? 'renzhining').trim()
 
 if (!master) {
   console.error('[pass-query] PASSWORD_MASTER 未配置（data/env.local）')
