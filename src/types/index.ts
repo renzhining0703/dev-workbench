@@ -76,6 +76,8 @@ export interface Requirement {
   updatedAt: string
   /** 软删除墓碑 ISO（同步协议：删除打墓碑参与 LWW 合并，UI 层过滤；超 90 天物理清理） */
   deletedAt?: string
+  /** 来源：bot = 排期表批量导入（wb-req-batch-add），缺省视为用户手建 */
+  source?: 'bot'
 }
 
 /** 待办优先级：high 置顶红标 / normal 默认 / low 沉底灰标 */
