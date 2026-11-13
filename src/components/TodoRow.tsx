@@ -122,6 +122,13 @@ export function TodoRow({
               )}
             </span>
 
+            {/* 来源标签：机器人写入的待办（无 source 的旧数据视为手写，不显示） */}
+            {todo.source === 'bot' && (
+              <span className="src-chip" title="这条待办由机器人（小龙虾）写入">
+                🤖 机器人
+              </span>
+            )}
+
             {/* 关联需求 chip（点击跳回需求抽屉） */}
             {reqName && todo.requirementId && (
               <button

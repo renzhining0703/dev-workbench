@@ -1458,6 +1458,12 @@ html.dark .num-accent { color: var(--wb-accent); }
   max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   cursor: pointer;
 }
+/* 来源标签：机器人写入的待办 */
+.wb-todo-row .src-chip {
+  flex-shrink: 0; font-size: 11px; color: #7c5cd6;
+  background: rgba(124,92,214,.1); border-radius: 6px; padding: 2px 7px;
+  white-space: nowrap;
+}
 .wb-todo-edit { flex: 1; height: 30px; padding: 4px 10px; }
 .wb-todo-row .pri { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 @media (max-width: 640px) {

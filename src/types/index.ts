@@ -94,6 +94,8 @@ export interface TodoItem {
   priority?: TodoPriority
   /** 关联需求 id：从今日节点一键生成待办时写入，可点击跳回需求抽屉 */
   requirementId?: string
+  /** 来源：bot = 机器人写入（wb-todo-add），缺省视为用户手写 */
+  source?: 'bot'
   createdAt: string
   /** 最后更新时间（同步用，缺字段视为 createdAt） */
   updatedAt?: string

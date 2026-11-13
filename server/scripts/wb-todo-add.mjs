@@ -107,6 +107,8 @@ store.update(username, (remote) => {
       createdAt: nowIso,
       updatedAt: nowIso,
       priority,
+      // 来源标记：前端据此显示「机器人」标签
+      source: 'bot',
     })
   }
   addedCount = toAdd.length
