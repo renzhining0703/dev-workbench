@@ -19,7 +19,7 @@
  *   DATA_DIR / DB_FILE     见 server/config.mjs
  */
 import { DatabaseSync } from 'node:sqlite'
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { loadServerEnv, loadConfig } from '../config.mjs'
 
@@ -72,6 +72,39 @@ function pruneOldBackups(dir, keep) {
   return { kept: files.length - toRemove.length, removed: toRemove.length }
 }
 
+/** OpenClaw 核心配置文件（openclaw.json 含插件明文密钥，secrets.json 为密钥库） */
+const OPENCLAW_FILES = [
+  '/root/.openclaw/openclaw.json',
+  '/root/.openclaw/secrets/secrets.json',
+]
+
+/** 备份 OpenClaw 配置文件到 openclaw/ 子目录，滚动保留 RETENTION_DAYS 份；文件不存在则跳过 */
+function backupOpenclawConfigs() {
+  if (!OPENCLAW_FILES.some((f) => existsSync(f))) return null
+  const dir = join(BACKUP_DIR, 'openclaw')
+  mkdirSync(dir, { recursive: true })
+  const ts = stamp()
+  for (const src of OPENCLAW_FILES) {
+    if (!existsSync(src)) continue
+    const base = src.split('/').pop()
+    const dot = base.lastIndexOf('.')
+    const name = dot > 0 ? `${base.slice(0, dot)}-${ts}${base.slice(dot)}` : `${base}-${ts}`
+    copyFileSync(src, join(dir, name))
+  }
+  // 只清理本脚本产生的带时间戳文件
+  const prefixes = OPENCLAW_FILES.map((f) => f.split('/').pop().split('.')[0])
+  const re = new RegExp(`^(${prefixes.join('|')})-\\d{8}-\\d{6}\\.`)
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => re.test(f)).sort().reverse() : []
+  for (const f of files.slice(RETENTION_DAYS)) {
+    try {
+      unlinkSync(join(dir, f))
+    } catch {
+      /* 单个清理失败不阻断整体 */
+    }
+  }
+  return { dir, kept: files.length, copied: OPENCLAW_FILES.filter((f) => existsSync(f)).length }
+}
+
 function main() {
   if (!existsSync(SRC_DB)) {
     console.error(`[backup] 数据库文件不存在: ${SRC_DB}（服务可能尚未首次启动），跳过`)
@@ -101,6 +134,9 @@ function main() {
   console.log(
     `[backup] ✓ ${dest} (${sizeKb}KB) | 保留 ${kept} 份 | 清理 ${removed} 份 | 阈值 ${RETENTION_DAYS} 天`,
   )
+
+  const oc = backupOpenclawConfigs()
+  if (oc) console.log(`[backup] ✓ openclaw 配置 ${oc.copied} 个 → ${oc.dir} | 保留 ${oc.kept} 份`)
 }
 
 main()

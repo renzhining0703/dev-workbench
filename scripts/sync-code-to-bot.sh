@@ -2,11 +2,19 @@
 #
 # 本地代码镜像 → OpenClaw 机器人 workspace（供其 grep/阅读源码）
 #
+# 【2026-11-15 起角色变更】主同步通道已改为服务器侧 git pull（只读公钥），
+# 本脚本退居两个辅助用途：
+#   1. fighting-design（GitHub 仓库，服务器连不上 GitHub，只能从 Mac 推）
+#   2. 临时补充 owner 本地未提交的 WIP 改动（git pull 只同步已提交代码）
+#
 # 用法：
 #   bash scripts/sync-code-to-bot.sh <本地项目路径> [更多项目路径...]
 #
 # 目标：root@211.159.169.153:/root/.openclaw/workspace/code/<项目名>/
-# 说明：--delete + --delete-excluded 严格镜像（目标目录是纯镜像，机器人不得在其中
+# ⚠️ 2026-11-15 起目标目录多为 git 克隆镜像：必须保护远端 .git，
+#    故禁用 --delete-excluded（排除文件在远端受 --delete 保护不删）；
+#    WIP rsync 是临时快照，下次服务器 git 同步会把工作区覆盖回已提交状态。
+# 说明：--delete 严格镜像源码（目标目录是纯镜像，机器人不得在其中
 #       存放自己的文件；新加的排除规则也会把远端对应文件删掉）；
 #       排除依赖/构建产物/git 历史/编辑器噪音，只同步源码。
 set -euo pipefail
@@ -22,7 +30,7 @@ for PROJECT_DIR in "$@"; do
   [ -d "$PROJECT_DIR" ] || { echo "✗ 目录不存在: $PROJECT_DIR"; exit 1; }
 
   echo ">>> 同步 $NAME → $DEST_BASE/$NAME"
-  rsync -az --delete --delete-excluded \
+  rsync -az --delete --no-owner --no-group \
     --exclude 'node_modules/' \
     --exclude 'dist/' \
     --exclude 't-dist/' \
