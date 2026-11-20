@@ -78,6 +78,22 @@ export interface Requirement {
   deletedAt?: string
   /** 来源：bot = 排期表批量导入（wb-req-batch-add），缺省视为用户手建 */
   source?: 'bot'
+  /** 需求类型：缺省/normal = 常规需求；工单/样式/bug/文案为无 PRD 类型，机器人不跟踪 PRD */
+  type?: RequirementType
+}
+
+/** 需求类型：normal 常规（缺省）/ ticket 线上工单 / style 样式优化 / bug bug修复 / copy 文案调整 */
+export type RequirementType = 'normal' | 'ticket' | 'style' | 'bug' | 'copy'
+
+/** 无 PRD 类型集合：这些类型机器人不跟踪 PRD（prd_scan.py 同口径，改动需两侧同步） */
+export const NO_PRD_TYPES: RequirementType[] = ['ticket', 'style', 'bug', 'copy']
+
+/** 需求类型展示元信息：label 徽章文案 / color 徽章文字色（normal 不出徽章） */
+export const REQUIREMENT_TYPE_META: Record<Exclude<RequirementType, 'normal'>, { label: string; color: string }> = {
+  ticket: { label: '工单', color: 'var(--wb-warn)' },
+  style: { label: '样式', color: 'var(--wb-purple)' },
+  bug: { label: 'bug', color: 'var(--wb-danger)' },
+  copy: { label: '文案', color: 'var(--wb-success)' },
 }
 
 /** 待办优先级：high 置顶红标 / normal 默认 / low 沉底灰标 */

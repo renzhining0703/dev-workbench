@@ -7,6 +7,9 @@
  */
 import { randomUUID } from 'node:crypto'
 
+/** 需求类型合法枚举（与前端 types/index.ts、prd-scan-list.sh 同口径；ticket/style/bug/copy 为无 PRD 类型） */
+const REQUIREMENT_TYPES = ['normal', 'ticket', 'style', 'bug', 'copy']
+
 /** 状态映射：表内「任务进度」→ 工作台 RequirementStatus；无法识别返回 null */
 export function mapStatus(progress, taskType) {
   const p = (progress ?? '').trim()
@@ -125,6 +128,8 @@ export function buildRequirement(item, nowIso) {
     testTime: null,
     publishTime: null,
     remark: item.remark ?? '',
+    // 需求类型：机器人侧显式带合法 type 才写入；缺省不写字段（读方视为 normal 常规需求）
+    ...(REQUIREMENT_TYPES.includes(item.type) ? { type: item.type } : {}),
     updatedAt: nowIso,
     source: 'bot',
   }

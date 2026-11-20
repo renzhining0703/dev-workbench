@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Requirement, RequirementStatus } from '../types'
-import { STATUS_FLOW, statusMeta } from '../types'
+import { STATUS_FLOW, statusMeta, REQUIREMENT_TYPE_META } from '../types'
 import { copyToClipboard, exportCsv, fmtDate, fmtDateShort, isDateToday, toDateStr } from '../lib/utils'
 import { highlight } from '../lib/highlight'
 import {
@@ -158,6 +158,21 @@ function TestDueBadge({ r }: { r: Requirement }) {
         {label}
       </span>
     </div>
+  )
+}
+
+/** 需求类型 tag：内联跟在需求名后面（仅工单/样式/bug/文案显示，常规需求不出） */
+function RequirementTypeBadge({ r }: { r: Requirement }) {
+  const t = r.type
+  if (!t || t === 'normal') return null
+  const meta = REQUIREMENT_TYPE_META[t]
+  return (
+    <span
+      className="wb-chip ml-1.5 whitespace-nowrap align-middle"
+      style={{ color: meta.color, background: 'var(--wb-brand-soft)', fontSize: '11px', padding: '0 6px' }}
+    >
+      {meta.label}
+    </span>
   )
 }
 
@@ -944,7 +959,12 @@ export function RequirementTable({
                           }}
                           title="点击复制名称"
                         >
-                          {copiedName === r.name ? '✓ 已复制' : highlight(r.name, keyword)}
+                          {copiedName === r.name ? '✓ 已复制' : (
+                            <>
+                              {highlight(r.name, keyword)}
+                              <RequirementTypeBadge r={r} />
+                            </>
+                          )}
                         </div>
                         {showRemark && r.remark && (
                           <div className="wb-remark">
@@ -1520,6 +1540,7 @@ function RequirementCard({
         title="点击查看详情"
       >
         {highlight(r.name, keyword)}
+        <RequirementTypeBadge r={r} />
       </div>
       {showRemark && r.remark && (
         <div

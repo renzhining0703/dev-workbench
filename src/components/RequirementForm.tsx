@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import type { Requirement, RequirementStatus } from '../types'
+import type { Requirement, RequirementStatus, RequirementType } from '../types'
 import { useStore } from '../store/StoreContext'
 import { isVisible } from '../lib/fields'
 import { defaultVisibleStatuses, visibleStatusOptions } from '../lib/statuses'
@@ -22,6 +22,7 @@ const emptyDraft = (status: RequirementStatus, branch: string): RequirementDraft
   prdUrl: '',
   publishModule: '',
   status,
+  type: 'normal',
   createdAt: new Date().toISOString(),
   devStartTime: null,
   devEndTime: null,
@@ -29,6 +30,15 @@ const emptyDraft = (status: RequirementStatus, branch: string): RequirementDraft
   publishTime: null,
   remark: '',
 })
+
+/** 需求类型下拉选项：工单/样式/bug/文案为无 PRD 类型，机器人不跟踪 PRD */
+const requirementTypeOptions: Array<{ value: RequirementType; label: string }> = [
+  { value: 'normal', label: '常规需求' },
+  { value: 'ticket', label: '线上工单' },
+  { value: 'style', label: '样式优化' },
+  { value: 'bug', label: 'bug 修复' },
+  { value: 'copy', label: '文案调整' },
+]
 
 /** 时间字段：ISO -> yyyy-MM-dd，供 input[type=date] 使用 */
 function toDateInput(iso: string | null): string {
@@ -114,6 +124,7 @@ export function RequirementFormModal({
         prdUrl: initial.prdUrl ?? '',
         publishModule: initial.publishModule,
         status: initial.status,
+        type: initial.type ?? 'normal',
         createdAt: initial.createdAt,
         devStartTime: initial.devStartTime,
         devEndTime: initial.devEndTime,
@@ -132,6 +143,7 @@ export function RequirementFormModal({
         prdUrl: prefill.prdUrl ?? '',
         publishModule: prefill.publishModule ?? '',
         status: defaultStatus,
+        type: prefill.type ?? 'normal',
         createdAt: new Date().toISOString(),
         devStartTime: null,
         devEndTime: null,
@@ -198,6 +210,7 @@ export function RequirementFormModal({
       })),
       branch: draft.branch.trim(),
       prdUrl: (draft.prdUrl ?? '').trim() || undefined,
+      type: draft.type ?? 'normal',
       remark: draft.remark.trim(),
     })
   }
@@ -317,6 +330,18 @@ export function RequirementFormModal({
             </p>
           </div>
         )}
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>需求类型</label>
+          <Select
+            value={draft.type ?? 'normal'}
+            onChange={(t) => set('type', t)}
+            options={requirementTypeOptions}
+          />
+          <p className="mt-1 text-xs" style={{ color: 'var(--wb-ink-3)' }}>
+            工单/样式/bug/文案为无 PRD 类型，机器人不跟踪其 PRD
+          </p>
+        </div>
 
         <div>
           <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--wb-ink-2)' }}>PRD 链接</label>
