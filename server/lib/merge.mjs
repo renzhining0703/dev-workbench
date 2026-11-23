@@ -92,26 +92,27 @@ export function gcTombstones(list, nowMs = Date.now()) {
  * 非数组集合与 v1 一样按空数组处理；返回带新 serverTs 的完整快照。
  */
 export function mergeSnapshot(remote, body, nowIso = new Date().toISOString()) {
+  const nowMs = Date.parse(nowIso)
   return {
     version: SNAPSHOT_VERSION,
     serverTs: nowIso,
     requirements: gcTombstones(mergeByUpdatedAt(
       Array.isArray(remote.requirements) ? remote.requirements : [],
       Array.isArray(body.requirements) ? body.requirements : [],
-    )),
+    ), nowMs),
     todos: gcTombstones(mergeByUpdatedAt(
       Array.isArray(remote.todos) ? remote.todos : [],
       Array.isArray(body.todos) ? body.todos : [],
-    )),
+    ), nowMs),
     projects: gcTombstones(mergeByUpdatedAt(
       Array.isArray(remote.projects) ? remote.projects : [],
       Array.isArray(body.projects) ? body.projects : [],
-    )),
+    ), nowMs),
     // 密码条目：同 LWW + 墓碑 GC；内容是客户端加密的密文，服务端不感知明文
     passwords: gcTombstones(mergeByUpdatedAt(
       Array.isArray(remote.passwords) ? remote.passwords : [],
       Array.isArray(body.passwords) ? body.passwords : [],
-    )),
+    ), nowMs),
     settings: mergeSettings(remote.settings ?? {}, body.settings ?? {}),
   }
 }

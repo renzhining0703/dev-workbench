@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { format, parseISO } from 'date-fns'
 import type { TodoItem, TodoPriority } from '../types'
 import { nextPriority, priorityOf, PRIORITY_META } from '../lib/todos'
+import { setAiFocusTodo } from '../lib/aiFocus'
 
 /** 完成时间展示：HH:mm（旧数据缺 completedAt 时不显示） */
 export function fmtCompletedAt(iso: string | undefined): string {
@@ -111,8 +112,9 @@ export function TodoRow({
             <span
               className="content"
               style={muted ? { color: 'var(--wb-ink-3)' } : undefined}
+              onClick={() => setAiFocusTodo(todo)}
               onDoubleClick={startEdit}
-              title={todo.content}
+              title={`${todo.content}（单击携带到 AI 面板，双击编辑）`}
             >
               {todo.content}
               {todo.done && doneTime && (

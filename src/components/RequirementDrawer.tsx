@@ -12,6 +12,7 @@ import {
 import { isVisible, type TimeFieldKey } from '../lib/fields'
 import { isStatusVisible, visibleStatusOptions } from '../lib/statuses'
 import { useStore } from '../store/StoreContext'
+import { setAiFocusRequirement } from '../lib/aiFocus'
 import { ProjectPublishedChip } from './ui'
 import { Select } from './Select'
 
@@ -67,6 +68,11 @@ export function RequirementDrawer({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [requirement, onClose])
+
+  // 抽屉打开 → 上报 AI 面板焦点需求；关闭不清空（保留「最近查看的需求」供面板携带）
+  useEffect(() => {
+    if (requirement) setAiFocusRequirement(requirement)
+  }, [requirement])
 
   if (!requirement) return null
   const r = requirement

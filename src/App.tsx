@@ -23,6 +23,7 @@ import { ShortcutsModal } from './components/ShortcutsModal'
 import { SettingsModal } from './components/SettingsModal'
 import { AddTodoModal } from './components/AddTodoModal'
 import { CommandPalette, type PaletteTab } from './components/CommandPalette'
+import { AiPanel } from './components/AiPanel'
 import { AuthPage } from './components/AuthPage'
 import { UserMenu } from './components/UserMenu'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -923,6 +924,9 @@ function AppInner({
           setPaletteOpen(false)
         }}
       />
+
+      {/* AI 面板（小朵）：仅登录态渲染（组件内部判 token） */}
+      <AiPanel />
     </div>
   )
 }

@@ -10,6 +10,7 @@ import express from 'express'
 import { createAuthRouter } from './routes/auth.mjs'
 import { createSyncRouter } from './routes/sync.mjs'
 import { createPushRouter } from './routes/push.mjs'
+import { createAiRouter } from './routes/ai.mjs'
 import { requireAuth } from './middleware/auth.mjs'
 
 /**
@@ -19,8 +20,10 @@ import { requireAuth } from './middleware/auth.mjs'
  * @param {import('./store/sessions.mjs').SessionStore} deps.sessionStore
  * @param {import('./store/snapshots.mjs').SnapshotStore} deps.snapshotStore
  * @param {import('./store/push-subscriptions.mjs').PushSubscriptionStore} deps.pushStore
+ * @param {import('./store/ai-contexts.mjs').AiContextStore} [deps.aiStore] 缺省时 /api/ai 不挂载
+ * @param {import('./lib/agent-client.mjs').runAgentTurn} [deps.aiRunner] 测试注入用，缺省真实 CLI 调用
  */
-export function createApp({ config, userStore, sessionStore, snapshotStore, pushStore }) {
+export function createApp({ config, userStore, sessionStore, snapshotStore, pushStore, aiStore, aiRunner }) {
   const app = express()
   app.disable('x-powered-by')
   // nginx 反代一层；express-rate-limit 依赖它还原真实客户端 IP
@@ -33,7 +36,7 @@ export function createApp({ config, userStore, sessionStore, snapshotStore, push
     if (origin && config.allowedOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin)
       res.setHeader('Vary', 'Origin')
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-AI-Async')
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     }
     // OPTIONS 预检对任意路径一律 204（v1 行为）
@@ -64,6 +67,9 @@ export function createApp({ config, userStore, sessionStore, snapshotStore, push
       '/api/push',
       createPushRouter({ config, pushStore, requireAuth: auth }),
     )
+  }
+  if (aiStore) {
+    app.use('/api/ai', createAiRouter({ config, aiStore, requireAuth: auth, runAgentTurnFn: aiRunner }))
   }
 
   // ---- 404（v1：{ok:false,error:'not found'}）----

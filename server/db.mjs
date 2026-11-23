@@ -12,7 +12,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS users (
@@ -69,6 +69,26 @@ CREATE INDEX IF NOT EXISTS idx_push_subs_username ON push_subscriptions(username
 `
 
 /**
+ * v4：AI 面板上下文表。
+ * - id 为签名上下文标识（ctx-<32hex>），HMAC 签名存 signature 列，agent 凭 id 换取
+ * - payload 为最小化上下文 JSON（服务端裁剪字段，不透传原始对象）
+ * - fetched_at 记录 agent 最近一次取回时间（诊断用，可重复读取）
+ * - 过期超过 24h 的行由创建时惰性 GC 清理
+ */
+const SCHEMA_V4 = `
+CREATE TABLE IF NOT EXISTS ai_contexts (
+  id         TEXT PRIMARY KEY,
+  username   TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  payload    TEXT NOT NULL,
+  signature  TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  fetched_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_contexts_username ON ai_contexts(username);
+`
+
+/**
  * 打开（或创建）数据库并应用 schema。
  * @param {string} file 数据库文件路径
  * @returns {import('node:sqlite').DatabaseSync}
@@ -90,6 +110,7 @@ const MIGRATION_STEPS = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
   { version: 3, sql: SCHEMA_V3 },
+  { version: 4, sql: SCHEMA_V4 },
 ]
 
 function migrate(db) {

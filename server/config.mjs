@@ -108,5 +108,17 @@ export function loadConfig(env = process.env) {
     // 未配置时 push-daily 自动跳过该通道；APP_PUBLIC_URL 用于消息里的「打开应用」链接
     serverchanSendKey: (env.SERVERCHAN_SENDKEY ?? '').trim(),
     appPublicUrl: envOrDefault(env, 'APP_PUBLIC_URL', 'http://211.159.169.153/dev-workbench/'),
+
+    // AI 面板（小朵内嵌）：两个密钥都配置后 /api/ai/* 才可用
+    // - AI_CONTEXT_SECRET：context_id 的 HMAC 签名密钥（openssl rand -hex 32 生成）
+    // - AI_AGENT_TOKEN：agent 换取上下文的 Bearer token（与机器人侧 wb-agent-token 一致）
+    // - AI_OPENCLAW_BIN / AI_PATH_PREFIX：本机 openclaw CLI 与 Node PATH 前缀（仅 loopback 调用）
+    aiContextSecret: (env.AI_CONTEXT_SECRET ?? '').trim(),
+    aiAgentToken: (env.AI_AGENT_TOKEN ?? '').trim(),
+    aiContextTtlMinutes: parseInt10(env, 'AI_CONTEXT_TTL_MINUTES', 30),
+    aiChatTimeoutMs: parseInt10(env, 'AI_CHAT_TIMEOUT_MS', 300000),
+    aiChatRatePerMin: parseInt10(env, 'AI_CHAT_RATE_PER_MIN', 10),
+    aiOpenclawBin: envOrDefault(env, 'AI_OPENCLAW_BIN', '/root/.local/share/pnpm/openclaw'),
+    aiPathPrefix: envOrDefault(env, 'AI_PATH_PREFIX', '/root/.nvm/versions/node/v22.23.5/bin:/root/.local/share/pnpm'),
   }
 }

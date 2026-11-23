@@ -10,6 +10,9 @@
  *   GET  /api/auth/me          → bearer
  *   GET  /api/snapshot         → bearer, per-user
  *   POST /api/push             → bearer, per-user（事务化 LWW 合并）
+ *   POST /api/ai/context       → bearer（签发签名上下文 id）
+ *   POST /api/ai/chat          → bearer（转发 OpenClaw agent turn）
+ *   GET  /api/ai/context/:id   → agent token（机器人换取最小化上下文）
  *
  * 启动：node index.mjs（建议 --no-warnings 静默 node:sqlite 实验性提示）
  * 或 pm2 start ecosystem.config.cjs
@@ -20,6 +23,7 @@ import { UserStore } from './store/users.mjs'
 import { SessionStore } from './store/sessions.mjs'
 import { SnapshotStore } from './store/snapshots.mjs'
 import { PushSubscriptionStore } from './store/push-subscriptions.mjs'
+import { AiContextStore } from './store/ai-contexts.mjs'
 import { createApp } from './app.mjs'
 import { runStartup } from './startup.mjs'
 
@@ -29,7 +33,8 @@ const userStore = new UserStore(db)
 const sessionStore = new SessionStore(db)
 const snapshotStore = new SnapshotStore(db)
 const pushStore = new PushSubscriptionStore(db)
-const app = createApp({ config, userStore, sessionStore, snapshotStore, pushStore })
+const aiStore = new AiContextStore(db)
+const app = createApp({ config, userStore, sessionStore, snapshotStore, pushStore, aiStore })
 
 const server = app.listen(config.port, config.host, () => {
   // 启动钩子放在 listen 成功之后；端口冲突不会留下半初始化的数据表
