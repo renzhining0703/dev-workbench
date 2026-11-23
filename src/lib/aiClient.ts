@@ -64,6 +64,7 @@ function errorText(status: number, raw?: string): string {
   if (status === 503) {
     if (raw === 'ai not configured') return '服务端未配置 AI 通道（env.local）'
     if (raw === 'agent reply empty') return '小朵本次未返回内容，请重新发送'
+    if (raw === 'agent reply invalid') return '小朵回复未通过事实校验，请重新发送'
     return '小朵暂时不可用，稍后再试'
   }
   if (status === 504) return '小朵回复超时，请稍后再试'

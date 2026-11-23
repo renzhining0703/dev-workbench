@@ -83,6 +83,7 @@ function composePanelMessage({ username, nickname, text, contextId }) {
   }
   lines.push(
     '面板执行约束：这是一次性 CLI 会话，禁止 sessions_spawn / sessions_yield；代码审查由当前 Agent 按现有只读 diff 规范直接完成并返回最终结果。',
+    '工具结果约束：以工具实际返回的 content 为准；禁止把文本结果描述成图片、附件或通道故障。服务端会读取本轮会话日志校验，矛盾回复会被拦截并触发无工具纠错。',
     '正文：',
     text,
   )
@@ -128,7 +129,9 @@ export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = 
       job.status = 'error'
       if (err instanceof AgentError) {
         job.statusCode = err.name === 'AgentTimeoutError' ? 504 : 503
-        job.error = err.name === 'AgentEmptyReplyError' ? 'agent reply empty' : 'agent unavailable'
+        if (err.name === 'AgentEmptyReplyError') job.error = 'agent reply empty'
+        else if (err.name === 'AgentReplyValidationError') job.error = 'agent reply invalid'
+        else job.error = 'agent unavailable'
         console.error('[ai] agent turn failed:', err.message)
       } else {
         job.statusCode = 500
@@ -252,6 +255,7 @@ export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = 
         }),
         sessionKey: sessionKeyFor(req.user.username),
         timeoutMs: config.aiChatTimeoutMs ?? 300000,
+        model: config.aiModel,
         openclawBin: config.aiOpenclawBin,
         pathPrefix: config.aiPathPrefix,
       })

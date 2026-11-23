@@ -8,8 +8,8 @@
  * 前后端行为保持一致（server/lib/merge.mjs 有同款 GC）。
  */
 
-/** 墓碑保留天数：超期物理清理 */
-export const TOMBSTONE_GC_DAYS = 90
+/** 墓碑保留天数：超期物理清理（与 server/lib/merge.mjs 保持一致） */
+export const TOMBSTONE_GC_DAYS = 365
 
 const DAY_MS = 86_400_000
 

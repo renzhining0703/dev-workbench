@@ -26,7 +26,7 @@ import {
   CONTEXT_ID_RE,
 } from '../lib/context-signing.mjs'
 import { minimizeContext } from '../routes/ai.mjs'
-import { AgentEmptyReplyError, AgentTimeoutError } from '../lib/agent-client.mjs'
+import { AgentEmptyReplyError, AgentReplyValidationError, AgentTimeoutError } from '../lib/agent-client.mjs'
 
 /* ---------------- 1. context-signing ---------------- */
 
@@ -338,6 +338,7 @@ test('ai chat（fake runner）：回复透传、消息协议含用户名/昵称/
     seen.push(args)
     if (mode === 'timeout') throw new AgentTimeoutError('timed out')
     if (mode === 'empty') throw new AgentEmptyReplyError('agent reply empty')
+    if (mode === 'invalid') throw new AgentReplyValidationError('agent reply invalid')
     return { reply: `收到：${args.sessionKey}` }
   }
   const app = createApp({
@@ -350,6 +351,7 @@ test('ai chat（fake runner）：回复透传、消息协议含用户名/昵称/
       aiContextTtlMinutes: 30,
       aiChatTimeoutMs: 5000,
       aiChatRatePerMin: 10,
+      aiModel: 'zhipu/glm-5.3-flash',
     },
     userStore: new UserStore(db),
     sessionStore: new SessionStore(db),
@@ -394,11 +396,13 @@ test('ai chat（fake runner）：回复透传、消息协议含用户名/昵称/
     assert.equal(seen.length, 1)
     const call = seen[0]
     assert.equal(call.sessionKey, 'wb-ui-frank')
+    assert.equal(call.model, 'zhipu/glm-5.3-flash')
     assert.ok(call.message.includes('【工作台面板消息】'))
     assert.ok(call.message.includes('用户：frank'))
     assert.ok(call.message.includes(ctx.data.contextId))
     assert.ok(call.message.includes('禁止 sessions_spawn / sessions_yield'))
     assert.ok(call.message.includes('代码审查由当前 Agent'))
+    assert.ok(call.message.includes('禁止把文本结果描述成图片'))
     assert.ok(call.message.includes('这个需求什么状态？'))
 
     // 超时 → 创建仍立即成功，查询任务时映射 504
@@ -425,6 +429,19 @@ test('ai chat（fake runner）：回复透传、消息协议含用户名/昵称/
     const { res: emptyRes, body: emptyBody } = await waitChatJob(base, auth, emptyJob.jobId)
     assert.equal(emptyRes.status, 503)
     assert.equal(emptyBody.error, 'agent reply empty')
+
+    // 连续误述工具结果 → 明确返回事实校验失败，不能下发错误内容
+    mode = 'invalid'
+    const invalid = await fetch(`${base}/api/ai/chat`, {
+      method: 'POST',
+      headers: { ...auth, 'X-AI-Async': '1' },
+      body: JSON.stringify({ message: '事实校验失败场景' }),
+    })
+    assert.equal(invalid.status, 202)
+    const { data: invalidJob } = await invalid.json()
+    const { res: invalidRes, body: invalidBody } = await waitChatJob(base, auth, invalidJob.jobId)
+    assert.equal(invalidRes.status, 503)
+    assert.equal(invalidBody.error, 'agent reply invalid')
 
     // 旧版 PWA 不带异步标记：仍返回原同步结构，避免部署切换期空白回复
     mode = 'ok'

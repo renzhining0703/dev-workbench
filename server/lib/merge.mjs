@@ -68,7 +68,7 @@ export function mergeSettings(remote, local) {
 }
 
 /** 墓碑保留天数：软删除条目超过该天数被物理清理（与前端 lib/tombstone.ts 一致） */
-export const TOMBSTONE_GC_DAYS = 90
+export const TOMBSTONE_GC_DAYS = 365
 
 const DAY_MS = 86_400_000
 

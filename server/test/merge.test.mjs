@@ -22,6 +22,13 @@ test('mergeByUpdatedAt：本地新增（服务端没有的 id）→ 收下', () 
   assert.equal(merged.length, 2)
 })
 
+test('gcTombstones：墓碑超过 90 天但未满 365 天 → 保留（防旧缓存复活）', () => {
+  const now = Date.parse('2026-11-23T00:00:00.000Z')
+  const old100d = new Date(now - 100 * 86_400_000).toISOString()
+  const list = [{ id: 'a', deletedAt: old100d, updatedAt: old100d }]
+  assert.deepEqual(gcTombstones(list, now).map((x) => x.id), ['a'])
+})
+
 test('mergeByUpdatedAt：同 id 本地更新时间大 → 本地胜', () => {
   const remote = [{ id: 'a', title: 'old', updatedAt: T(1) }]
   const local = [{ id: 'a', title: 'new', updatedAt: T(2) }]

@@ -21,6 +21,10 @@ import { getAiFocusRequirement, getAiFocusTodo, subscribeAiFocus } from '../lib/
 
 /** 页面选中内容上限（与服务端裁剪一致） */
 const SELECTION_MAX = 4000
+/** 面板消息本地保留条数（超出后只留最近 N 条） */
+const MESSAGE_LIMIT = 20
+/** 按用户名隔离的面板消息存储键 */
+const aiMessagesKey = (username: string) => `dev-workbench:ai-panel-messages:${username}`
 
 interface ChatMsg {
   id: number
@@ -197,6 +201,8 @@ const ChatMessage = memo(function ChatMessage({
 export function AiPanel() {
   const { session } = useAuth()
   const token = session?.token
+  const username = session?.user.username ?? ''
+  const storageKey = username ? aiMessagesKey(username) : null
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
@@ -215,6 +221,38 @@ export function AiPanel() {
   const nextMessageId = useRef(1)
   const stickToBottom = useRef(true)
   const sendRef = useRef<(text: string) => Promise<void>>(async () => {})
+
+  // 刷新后恢复当前用户最近 20 条面板消息
+  useEffect(() => {
+    if (!storageKey) {
+      setMessages([])
+      return
+    }
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) {
+      setMessages([])
+      return
+    }
+    try {
+      const parsed = JSON.parse(raw) as ChatMsg[]
+      const list = Array.isArray(parsed) ? parsed.slice(-MESSAGE_LIMIT) : []
+      setMessages(list)
+      nextMessageId.current = list.reduce((max, m) => Math.max(max, m.id), 0) + 1
+    } catch {
+      setMessages([])
+      nextMessageId.current = 1
+    }
+  }, [storageKey])
+
+  // 消息变化时写回本地，只保留最近 20 条
+  useEffect(() => {
+    if (!storageKey) return
+    if (messages.length === 0) {
+      localStorage.removeItem(storageKey)
+      return
+    }
+    localStorage.setItem(storageKey, JSON.stringify(messages.slice(-MESSAGE_LIMIT)))
+  }, [messages, storageKey])
 
   // 仅打开时订阅焦点变化，关闭后面板不响应工作台更新
   useEffect(() => {
@@ -275,12 +313,14 @@ export function AiPanel() {
   /** 切换面板显隐 */
   const toggleOpen = useCallback(() => setOpen((value) => !value), [])
 
-  /** 清空当前显示的前端会话，不影响 agent 服务端历史 */
+  /** 清空当前显示的前端会话并同步清掉本地存储，不影响 agent 服务端历史 */
   const clearConversation = useCallback(() => {
     if (sendingRef.current) return
     setMessages([])
     setInput('')
-  }, [])
+    nextMessageId.current = 1
+    if (storageKey) localStorage.removeItem(storageKey)
+  }, [storageKey])
 
   /** 组装本轮最小化快照与展示标签 */
   const buildSnapshot = useCallback((): { snapshot: AiContextSnapshot; label: string } | null => {

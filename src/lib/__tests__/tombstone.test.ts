@@ -54,6 +54,12 @@ describe('gcTombstones（超期墓碑物理清理）', () => {
     expect(gcTombstones(list, now).map((x) => x.id)).toEqual(['a'])
   })
 
+  it('保留超过 90 天但未满 365 天的墓碑（防旧缓存复活）', () => {
+    const old100d = new Date(now - 100 * DAY).toISOString()
+    const list: Item[] = [{ id: 'a', deletedAt: old100d }]
+    expect(gcTombstones(list, now).map((x) => x.id)).toEqual(['a'])
+  })
+
   it('保留活跃条目（无 deletedAt）', () => {
     const list: Item[] = [{ id: 'a' }, { id: 'b' }]
     expect(gcTombstones(list, now).map((x) => x.id)).toEqual(['a', 'b'])
@@ -82,7 +88,7 @@ describe('gcTombstones（超期墓碑物理清理）', () => {
 })
 
 describe('协议常量漂移护栏', () => {
-  it('TOMBSTONE_GC_DAYS === 90（与 server/lib/merge.mjs 必须相等）', () => {
-    expect(TOMBSTONE_GC_DAYS).toBe(90)
+  it('TOMBSTONE_GC_DAYS === 365（与 server/lib/merge.mjs 必须相等）', () => {
+    expect(TOMBSTONE_GC_DAYS).toBe(365)
   })
 })

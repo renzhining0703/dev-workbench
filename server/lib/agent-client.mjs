@@ -5,7 +5,7 @@
  * 工作台后端不直连 gateway 端口，gateway 也不对外网暴露。
  */
 import { spawn } from 'node:child_process'
-import { writeFile, unlink } from 'node:fs/promises'
+import { writeFile, unlink, stat, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -23,6 +23,88 @@ export class AgentUnavailableError extends AgentError {}
 export class AgentTimeoutError extends AgentError {}
 /** 正常退出但没有可提取的回复文本 */
 export class AgentEmptyReplyError extends AgentError {}
+/** 回复中的工具故障描述被本轮会话日志直接证伪 */
+export class AgentReplyValidationError extends AgentError {}
+
+const DEFAULT_SESSION_LOG_DIR = '/root/.openclaw/agents/main/sessions'
+const EMPTY_TOOL_RESULTS = Object.freeze({ text: 0, image: 0, other: 0, total: 0 })
+
+/** 统计会话日志增量中的工具结果类型；纠错时可附原文样本 */
+export function summarizeToolResults(jsonl, includeText = false) {
+  const summary = { ...EMPTY_TOOL_RESULTS }
+  const textSamples = []
+  const pushText = (text) => {
+    summary.text += 1
+    summary.total += 1
+    if (includeText && textSamples.length < 30) textSamples.push(String(text ?? '').slice(0, 6000))
+  }
+  const visit = (content) => {
+    if (typeof content === 'string') {
+      pushText(content)
+      return
+    }
+    if (!Array.isArray(content)) return
+    for (const item of content) {
+      if (item?.type === 'toolResult') {
+        visit(item.content)
+        continue
+      }
+      if (item?.type === 'text') pushText(item.text)
+      else {
+        if (item?.type === 'image') summary.image += 1
+        else summary.other += 1
+        summary.total += 1
+      }
+    }
+  }
+  for (const line of String(jsonl ?? '').split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const record = JSON.parse(line)
+      if (record?.message?.role === 'toolResult') visit(record.message.content)
+      else if (record?.type === 'toolResult') visit(record.toolResult?.content ?? record.content)
+    } catch {
+      // 并发写入可能留下半行；跳过该行，不能用不完整日志做故障判断
+    }
+  }
+  return includeText ? { ...summary, textSamples } : summary
+}
+
+/** 判断回复是否断言工具结果不可读、被转成图片或读取通道故障 */
+export function hasToolOutputFailureClaim(reply) {
+  const text = String(reply ?? '')
+  if (/(?:误述|错误回复|更正|纠正)[\s\S]{0,100}(?:图片|文本|通道)/.test(text)) return false
+  return [
+    /(?:工具输出|工具结果|读取通道|回传通道|渲染链路)[\s\S]{0,100}(?:坏了|异常|故障|只返回图片|变成[\s\S]{0,8}图片|转成[\s\S]{0,8}图片|渲染成[\s\S]{0,8}图片)/i,
+    /(?:exec|read|echo)[\s\S]{0,80}(?:只返回|全变成|都变成|转成|渲染成)[\s\S]{0,20}图片/i,
+    /模型侧拿到的是[\s\S]{0,40}see attached image/i,
+    /(?:拿不到|没有|读不到|看不到|无法读取|不能读取)[\s\S]{0,30}(?:可读|结果正文|具体数值|工具结果|返回内容)/i,
+    /返回给我的内容没有可读正文/i,
+  ].some((pattern) => pattern.test(text))
+}
+
+/** 只有本轮结果全为文本时，才认定“全是图片/通道坏”的回复被日志证伪 */
+export function unsupportedToolOutputClaim(reply, toolResults) {
+  if (!toolResults?.total || toolResults.image > 0 || toolResults.text === 0) return false
+  return hasToolOutputFailureClaim(reply)
+}
+
+/** 获取会话日志当前字节位置；日志不可读时不启用校验，也不影响原对话 */
+async function sessionLogOffset(path) {
+  try {
+    return (await stat(path)).size
+  } catch (err) {
+    if (err?.code !== 'ENOENT') console.warn('[agent-client] session log stat failed:', err.message)
+    return null
+  }
+}
+
+/** 读取本次 turn 新增的日志并统计工具结果 */
+async function readTurnToolResults(path, offset) {
+  const buffer = await readFile(path)
+  const start = offset <= buffer.length ? offset : 0
+  return summarizeToolResults(buffer.subarray(start).toString('utf8'), true)
+}
 
 /** 从 CLI JSON 输出提取最终回复文本（兼容 payloads 为字符串或 {text} 形态） */
 export function extractReplyText(data) {
@@ -38,9 +120,12 @@ export function extractReplyText(data) {
   return parts.join('\n').trim()
 }
 
-/** 跑一个 agent turn，返回 { reply }；会话键决定历史延续 */
-export async function runAgentTurn({ message, sessionKey, timeoutMs, openclawBin, pathPrefix }) {
+/** 执行单次 CLI turn，并返回该轮会话日志里的工具结果统计 */
+async function runAgentTurnOnce({ message, sessionKey, timeoutMs, openclawBin, pathPrefix, sessionLogDir, model }) {
   const msgFile = join(tmpdir(), `wb-msg-${randomBytes(8).toString('hex')}.txt`)
+  const safeSessionKey = String(sessionKey ?? '').replace(/[^a-zA-Z0-9._-]/g, '_')
+  const logPath = join(sessionLogDir ?? DEFAULT_SESSION_LOG_DIR, `${safeSessionKey}.jsonl`)
+  const logOffset = await sessionLogOffset(logPath)
   await writeFile(msgFile, message, 'utf8')
   // CLI --timeout 单位秒；进程层超时另加 5s 余量兜底
   const cliTimeout = Math.max(10, Math.ceil(timeoutMs / 1000) - 5)
@@ -56,6 +141,7 @@ export async function runAgentTurn({ message, sessionKey, timeoutMs, openclawBin
     String(cliTimeout),
     '--json',
   ]
+  if (model) args.push('--model', model)
   return new Promise((resolve, reject) => {
     const child = spawn(openclawBin, args, {
       env: { ...process.env, PATH: `${pathPrefix}:${process.env.PATH ?? ''}` },
@@ -78,7 +164,7 @@ export async function runAgentTurn({ message, sessionKey, timeoutMs, openclawBin
       clearTimeout(timer)
       reject(new AgentUnavailableError(`agent spawn failed: ${err.code ?? err.message}`))
     })
-    child.on('close', () => {
+    child.on('close', async () => {
       clearTimeout(timer)
       // 消息临时文件无论成败都删（unlink 异步不阻塞返回）
       void unlink(msgFile).catch(() => {})
@@ -96,7 +182,44 @@ export async function runAgentTurn({ message, sessionKey, timeoutMs, openclawBin
       }
       const reply = extractReplyText(data)
       if (!reply) return reject(new AgentEmptyReplyError('agent reply empty'))
-      resolve({ reply })
+      let toolResults = { ...EMPTY_TOOL_RESULTS }
+      if (logOffset !== null) {
+        try {
+          toolResults = await readTurnToolResults(logPath, logOffset)
+        } catch (err) {
+          console.warn('[agent-client] session log read failed:', err.message)
+        }
+      }
+      resolve({ reply, toolResults })
     })
   })
+}
+
+/** 跑 agent turn；文本结果被误述为不可读时拦截，并附原文做一次无工具纠错 */
+export async function runAgentTurn(options) {
+  const execute = options.turnRunner ?? runAgentTurnOnce
+  const timeoutMs = options.timeoutMs ?? 300000
+  const deadline = Date.now() + timeoutMs
+  const first = await execute({ ...options, timeoutMs })
+  if (!unsupportedToolOutputClaim(first.reply, first.toolResults)) return { reply: first.reply }
+
+  console.warn(
+    `[agent-client] blocked unsupported tool-output claim: ${options.sessionKey}; text=${first.toolResults.text}, image=${first.toolResults.image}`,
+  )
+  const remainingMs = deadline - Date.now()
+  if (remainingMs < 1000) throw new AgentTimeoutError('agent turn timed out before correction')
+  const evidence = (first.toolResults.textSamples ?? []).join('\n--- 下一条工具结果 ---\n').slice(0, 24000)
+  const correctionLines = [
+    '【工作台服务端事实校验】你的上一轮回复已被拦截，尚未发送给用户。',
+    `本会话日志显示：上一轮工具结果包含文本 ${first.toolResults.text} 条、图片 ${first.toolResults.image} 条。你关于“工具结果不可读/只返回图片/通道故障”的描述与日志矛盾。`,
+    '请直接利用当前会话已经返回的文本结果以及下方原文，回答用户最初的问题。本轮不要调用任何工具，不要重复任何写操作，不要再讨论通道故障。',
+    '若下方原文确实缺少回答所需数据，只说明具体缺哪个字段；禁止把文本结果描述成图片、附件或不可读内容。',
+  ]
+  if (evidence) correctionLines.push('【服务端从会话日志原样提取的工具文本】', evidence, '【工具文本结束】')
+  const corrected = await execute({ ...options, message: correctionLines.join('\n'), timeoutMs: remainingMs })
+  const correctedEvidence = corrected.toolResults?.total ? corrected.toolResults : first.toolResults
+  if (unsupportedToolOutputClaim(corrected.reply, correctedEvidence)) {
+    throw new AgentReplyValidationError('agent reply contradicted tool results twice')
+  }
+  return { reply: corrected.reply }
 }

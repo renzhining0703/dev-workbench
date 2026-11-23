@@ -115,6 +115,7 @@ export function TodoPanel({
 }: TodoProps) {
   const [input, setInput] = useState('')
   const [overdueOpen, setOverdueOpen] = useState(false)
+  const [futureOpen, setFutureOpen] = useState(true)
   const today = toDateStr(new Date())
 
   const todayTodos = useMemo(
@@ -129,6 +130,15 @@ export function TodoPanel({
       todos
         .filter((t) => !t.done && t.date < today)
         .sort((a, b) => b.date.localeCompare(a.date)),
+    [todos, today],
+  )
+
+  // 后续待办：目标日期晚于今天且未完成，今日页保留展示避免“凭空消失”
+  const futureTodos = useMemo(
+    () =>
+      todos
+        .filter((t) => !t.done && t.date > today)
+        .sort((a, b) => a.date.localeCompare(b.date)),
     [todos, today],
   )
 
@@ -288,6 +298,37 @@ export function TodoPanel({
                 />
               ))}
             </ul>
+          )}
+
+          {/* 后续待办：未来日期条目留在今日页可见，避免被误以为“消失” */}
+          {futureTodos.length > 0 && (
+            <div className="wb-overdue" style={{ marginTop: 10 }}>
+              <button
+                className="wb-overdue-head"
+                onClick={() => setFutureOpen((v) => !v)}
+              >
+                <span>📤 后续待办 {futureTodos.length} 条</span>
+                <span style={{ fontSize: 11, opacity: 0.75 }}>{futureOpen ? '收起' : '展开'}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 10 }}>{futureOpen ? '▲' : '▼'}</span>
+              </button>
+              {futureOpen && (
+                <div className="wb-overdue-body">
+                  {futureTodos.map((t) => (
+                    <div key={t.id} className="row">
+                      <span
+                        style={{ flex: 1, fontSize: 12.5, minWidth: 0 }}
+                        title={`${t.content}（目标日期 ${t.date}）`}
+                      >
+                        {t.content}
+                      </span>
+                      <span className="date" style={{ color: 'var(--wb-accent-600)' }}>
+                        已顺延到 {t.date.slice(5)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
