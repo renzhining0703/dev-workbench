@@ -25,6 +25,8 @@ export class AgentTimeoutError extends AgentError {}
 export class AgentEmptyReplyError extends AgentError {}
 /** 回复中的工具故障描述被本轮会话日志直接证伪 */
 export class AgentReplyValidationError extends AgentError {}
+/** 用户主动取消，运行中的 CLI 子进程已被终止 */
+export class AgentCancelledError extends AgentError {}
 
 const DEFAULT_SESSION_LOG_DIR = '/root/.openclaw/agents/main/sessions'
 const EMPTY_TOOL_RESULTS = Object.freeze({ text: 0, image: 0, other: 0, total: 0 })
@@ -120,11 +122,70 @@ export function extractReplyText(data) {
   return parts.join('\n').trim()
 }
 
-/** 执行单次 CLI turn，并返回该轮会话日志里的工具结果统计 */
-async function runAgentTurnOnce({ message, sessionKey, timeoutMs, openclawBin, pathPrefix, sessionLogDir, model }) {
+/** 会话日志路径；会话键消毒规则与 turn 执行保持一致 */
+export function sessionLogPath(sessionKey, sessionLogDir = DEFAULT_SESSION_LOG_DIR) {
+  const safe = String(sessionKey ?? '').replace(/[^a-zA-Z0-9._-]/g, '_')
+  return join(sessionLogDir, `${safe}.jsonl`)
+}
+
+/** 从日志增量提取本轮活动信号：工具调用次数与最后一条事件时间 */
+export function observeTurnActivity(jsonl) {
+  let toolCalls = 0
+  let lastEventAt = 0
+  for (const line of String(jsonl ?? '').split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const record = JSON.parse(line)
+      const ts = Date.parse(record?.timestamp ?? '')
+      if (Number.isFinite(ts)) lastEventAt = Math.max(lastEventAt, ts)
+      const message = record?.message
+      if (message?.role === 'assistant' && Array.isArray(message.content)) {
+        for (const item of message.content) if (item?.type === 'toolCall') toolCalls += 1
+      }
+    } catch {
+      // 并发写入可能留下半行；活动监视只做展示，不据此下结论
+    }
+  }
+  return { toolCalls, lastEventAt }
+}
+
+/** 活动信号 → 执行阶段：无工具调用=等待模型；10s 内有日志=执行工具；否则=生成回复 */
+export function phaseFromActivity({ toolCalls, lastEventAt }, nowMs = Date.now()) {
+  if (!toolCalls) return 'waiting'
+  const idleMs = nowMs - (lastEventAt || nowMs)
+  return idleMs < 10000 ? 'tooling' : 'composing'
+}
+
+/** 轮询会话日志增量的活动监视器；stop 后不再读取文件 */
+export function createActivityMonitor({ sessionKey, sessionLogDir, intervalMs = 2000, readFileFn = readFile, statFn = stat } = {}) {
+  const logPath = sessionLogPath(sessionKey, sessionLogDir)
+  const state = { toolCalls: 0, lastEventAt: 0 }
+  let offset = null
+  const poll = async () => {
+    try {
+      if (offset === null) offset = (await statFn(logPath)).size
+      const buffer = await readFileFn(logPath)
+      if (buffer.length <= offset) return
+      const activity = observeTurnActivity(buffer.subarray(offset).toString('utf8'))
+      state.toolCalls += activity.toolCalls
+      state.lastEventAt = Math.max(state.lastEventAt, activity.lastEventAt)
+      offset = buffer.length
+    } catch {
+      // 日志暂不可读时保留上次状态，不影响任务本身
+    }
+  }
+  const timer = setInterval(() => void poll(), intervalMs)
+  void poll()
+  return {
+    phase: (nowMs = Date.now()) => phaseFromActivity(state, nowMs),
+    stop: () => clearInterval(timer),
+  }
+}
+
+/** 执行单次 CLI turn，并返回该轮会话日志里的工具结果统计；signal 中止时终止子进程 */
+async function runAgentTurnOnce({ message, sessionKey, timeoutMs, openclawBin, pathPrefix, sessionLogDir, model, signal }) {
   const msgFile = join(tmpdir(), `wb-msg-${randomBytes(8).toString('hex')}.txt`)
-  const safeSessionKey = String(sessionKey ?? '').replace(/[^a-zA-Z0-9._-]/g, '_')
-  const logPath = join(sessionLogDir ?? DEFAULT_SESSION_LOG_DIR, `${safeSessionKey}.jsonl`)
+  const logPath = sessionLogPath(sessionKey, sessionLogDir)
   const logOffset = await sessionLogOffset(logPath)
   await writeFile(msgFile, message, 'utf8')
   // CLI --timeout 单位秒；进程层超时另加 5s 余量兜底
@@ -143,6 +204,7 @@ async function runAgentTurnOnce({ message, sessionKey, timeoutMs, openclawBin, p
   ]
   if (model) args.push('--model', model)
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new AgentCancelledError('cancelled by user'))
     const child = spawn(openclawBin, args, {
       env: { ...process.env, PATH: `${pathPrefix}:${process.env.PATH ?? ''}` },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -154,6 +216,14 @@ async function runAgentTurnOnce({ message, sessionKey, timeoutMs, openclawBin, p
       timedOut = true
       child.kill('SIGKILL')
     }, timeoutMs)
+    // 用户取消：直接杀掉 CLI 子进程，本轮按取消处理
+    const onAbort = () => {
+      clearTimeout(timer)
+      child.kill('SIGKILL')
+      reject(new AgentCancelledError('cancelled by user'))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    const removeAbortListener = () => signal?.removeEventListener('abort', onAbort)
     child.stdout.on('data', (d) => {
       stdout += d
     })
@@ -162,10 +232,12 @@ async function runAgentTurnOnce({ message, sessionKey, timeoutMs, openclawBin, p
     })
     child.on('error', (err) => {
       clearTimeout(timer)
+      removeAbortListener()
       reject(new AgentUnavailableError(`agent spawn failed: ${err.code ?? err.message}`))
     })
     child.on('close', async () => {
       clearTimeout(timer)
+      removeAbortListener()
       // 消息临时文件无论成败都删（unlink 异步不阻塞返回）
       void unlink(msgFile).catch(() => {})
       if (timedOut) return reject(new AgentTimeoutError('agent turn timed out'))
@@ -197,6 +269,7 @@ async function runAgentTurnOnce({ message, sessionKey, timeoutMs, openclawBin, p
 
 /** 跑 agent turn；文本结果被误述为不可读时拦截，并附原文做一次无工具纠错 */
 export async function runAgentTurn(options) {
+  if (options.signal?.aborted) throw new AgentCancelledError('cancelled by user')
   const execute = options.turnRunner ?? runAgentTurnOnce
   const timeoutMs = options.timeoutMs ?? 300000
   const deadline = Date.now() + timeoutMs
@@ -206,6 +279,7 @@ export async function runAgentTurn(options) {
   console.warn(
     `[agent-client] blocked unsupported tool-output claim: ${options.sessionKey}; text=${first.toolResults.text}, image=${first.toolResults.image}`,
   )
+  if (options.signal?.aborted) throw new AgentCancelledError('cancelled by user')
   const remainingMs = deadline - Date.now()
   if (remainingMs < 1000) throw new AgentTimeoutError('agent turn timed out before correction')
   const evidence = (first.toolResults.textSamples ?? []).join('\n--- 下一条工具结果 ---\n').slice(0, 24000)

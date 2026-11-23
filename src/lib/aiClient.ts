@@ -139,9 +139,17 @@ export async function createAiContext(
 
 interface AiChatJob {
   jobId: string
-  status: 'running' | 'done' | 'error'
+  status: 'running' | 'done' | 'error' | 'cancelled'
   contextId?: string
   reply?: string
+  /** running 期间的执行阶段：waiting=等待模型 tooling=执行工具 composing=生成回复 */
+  phase?: string
+}
+
+/** 聊天任务过程中的回调：拿到 jobId 后可取消，phase 用于状态文案 */
+export interface AiChatHooks {
+  onJobId?: (jobId: string) => void
+  onPhase?: (phase: string) => void
 }
 
 /** 中止等待时抛出标准 AbortError，交由面板静默处理 */
@@ -154,6 +162,7 @@ export async function sendAiChat(
   token: string,
   args: { message: string; contextId?: string },
   signal?: AbortSignal,
+  hooks: AiChatHooks = {},
 ): Promise<{ reply: string; contextId?: string }> {
   const job = await request<AiChatJob>(token, '/chat', {
     method: 'POST',
@@ -161,6 +170,7 @@ export async function sendAiChat(
     body: JSON.stringify(args),
     signal,
   })
+  hooks.onJobId?.(job.jobId)
   const deadline = Date.now() + 310000
   while (Date.now() < deadline) {
     throwIfAborted(signal)
@@ -168,11 +178,23 @@ export async function sendAiChat(
       method: 'GET',
       signal,
     })
+    if (current.status === 'cancelled') throw new AiPanelError('用户已取消', 499)
     if (current.status === 'done') {
       if (!current.reply?.trim()) throw new AiPanelError('小朵返回了空回复，请重试', 503)
       return { reply: current.reply, contextId: current.contextId }
     }
+    if (current.phase) hooks.onPhase?.(current.phase)
     await new Promise((resolve) => setTimeout(resolve, 800))
   }
   throw new AiPanelError('等待回复超时，请稍后重试', 504)
+}
+
+/** 取消运行中的聊天任务；返回服务端任务状态（cancelled / done / error 等） */
+export async function cancelAiChat(token: string, jobId: string): Promise<string> {
+  const data = await request<{ jobId: string; status: string }>(
+    token,
+    `/chat/jobs/${jobId}/cancel`,
+    { method: 'POST', body: '{}' },
+  )
+  return data.status
 }

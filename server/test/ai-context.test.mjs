@@ -26,7 +26,7 @@ import {
   CONTEXT_ID_RE,
 } from '../lib/context-signing.mjs'
 import { minimizeContext } from '../routes/ai.mjs'
-import { AgentEmptyReplyError, AgentReplyValidationError, AgentTimeoutError } from '../lib/agent-client.mjs'
+import { AgentCancelledError, AgentEmptyReplyError, AgentReplyValidationError, AgentTimeoutError } from '../lib/agent-client.mjs'
 
 /* ---------------- 1. context-signing ---------------- */
 
@@ -453,6 +453,85 @@ test('ai chat（fake runner）：回复透传、消息协议含用户名/昵称/
     assert.equal(legacy.status, 200)
     const legacyBody = await legacy.json()
     assert.equal(legacyBody.data.reply, '收到：wb-ui-frank')
+  } finally {
+    await new Promise((resolve) => {
+      app.close(() => {
+        db.close()
+        rmSync(tmp, { recursive: true, force: true })
+        resolve()
+      })
+    })
+  }
+})
+
+test('ai chat 取消：运行中任务可取消并返回 cancelled；归属校验与阶段字段同步验证', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'wb-ai-test3-'))
+  const db = openDatabase(join(tmp, 'test.db'))
+  // 挂起直到收到取消信号，模拟长任务
+  const hangRunner = (args) => new Promise((resolve, reject) => {
+    args.signal?.addEventListener('abort', () => reject(new AgentCancelledError('cancelled by user')), { once: true })
+  })
+  const app = createApp({
+    config: {
+      allowedOrigins: [],
+      inviteCode: '',
+      rateLimitPerMin: 100,
+      aiContextSecret: SECRET,
+      aiAgentToken: AGENT_TOKEN,
+      aiContextTtlMinutes: 30,
+      aiChatTimeoutMs: 30000,
+      aiChatRatePerMin: 10,
+      aiModel: 'custom_deepseek/deepseek-flash',
+    },
+    userStore: new UserStore(db),
+    sessionStore: new SessionStore(db),
+    snapshotStore: new SnapshotStore(db),
+    aiStore: new AiContextStore(db),
+    aiRunner: hangRunner,
+  }).listen(0)
+  const base = `http://127.0.0.1:${app.address().port}`
+  try {
+    const token = await registerAndLogin(base, 'gina', 'passw0rd-gina')
+    const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+
+    const created = await fetch(`${base}/api/ai/chat`, {
+      method: 'POST',
+      headers: { ...auth, 'X-AI-Async': '1' },
+      body: JSON.stringify({ message: '跑一个长任务' }),
+    })
+    assert.equal(created.status, 202)
+    const { data: job } = await created.json()
+
+    // running 期间：查询接口带 phase；取消接口归属校验通过
+    const running = await fetch(`${base}/api/ai/chat/jobs/${job.jobId}`, { headers: auth })
+    const runningBody = await running.json()
+    assert.equal(runningBody.data.status, 'running')
+    assert.equal(runningBody.data.phase, 'waiting')
+
+    const other = await registerAndLogin(base, 'gina_peer', 'passw0rd-gina-peer')
+    const forbidden = await fetch(`${base}/api/ai/chat/jobs/${job.jobId}/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${other}` },
+    })
+    assert.equal(forbidden.status, 403)
+
+    const cancel = await fetch(`${base}/api/ai/chat/jobs/${job.jobId}/cancel`, {
+      method: 'POST',
+      headers: auth,
+    })
+    assert.equal(cancel.status, 200)
+    const cancelBody = await cancel.json()
+    assert.equal(cancelBody.data.status, 'cancelling')
+
+    // 任务收尾为 cancelled：200 返回，不进 error 分支
+    const { res, body } = await waitChatJob(base, auth, job.jobId)
+    assert.equal(res.status, 200)
+    assert.equal(body.data.status, 'cancelled')
+    assert.equal(body.data.reply, undefined)
+
+    // 取消已结束的任务：幂等返回当前状态
+    const again = await fetch(`${base}/api/ai/chat/jobs/${job.jobId}/cancel`, { method: 'POST', headers: auth })
+    assert.equal((await again.json()).data.status, 'cancelled')
   } finally {
     await new Promise((resolve) => {
       app.close(() => {

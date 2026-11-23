@@ -16,7 +16,12 @@ import {
   verifyContextId,
   safeTokenEqual,
 } from '../lib/context-signing.mjs'
-import { runAgentTurn, AgentError } from '../lib/agent-client.mjs'
+import {
+  runAgentTurn,
+  AgentError,
+  AgentCancelledError,
+  createActivityMonitor,
+} from '../lib/agent-client.mjs'
 
 const isAiConfigured = (config) =>
   Boolean(config.aiContextSecret && config.aiAgentToken)
@@ -119,26 +124,35 @@ export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = 
     }
   }
 
-  /** 后台执行 agent turn，结果暂存内存供短轮询读取 */
+  /** 后台执行 agent turn，结果暂存内存供短轮询读取；附带取消信号与执行阶段监视 */
   const runChatJob = async (job, args) => {
+    const controller = new AbortController()
+    job.cancel = () => controller.abort()
+    const monitor = createActivityMonitor({ sessionKey: args.sessionKey })
+    job.monitor = monitor
     try {
-      const { reply } = await runAgentTurnFn(args)
+      const { reply } = await runAgentTurnFn({ ...args, signal: controller.signal })
       job.reply = reply
       job.status = 'done'
     } catch (err) {
-      job.status = 'error'
-      if (err instanceof AgentError) {
+      if (err instanceof AgentCancelledError) {
+        job.status = 'cancelled'
+        console.info('[ai] chat job cancelled:', job.id)
+      } else if (err instanceof AgentError) {
+        job.status = 'error'
         job.statusCode = err.name === 'AgentTimeoutError' ? 504 : 503
         if (err.name === 'AgentEmptyReplyError') job.error = 'agent reply empty'
         else if (err.name === 'AgentReplyValidationError') job.error = 'agent reply invalid'
         else job.error = 'agent unavailable'
         console.error('[ai] agent turn failed:', err.message)
       } else {
+        job.status = 'error'
         job.statusCode = 500
         job.error = 'internal error'
         console.error('[ai] chat job error:', err)
       }
     } finally {
+      monitor.stop()
       job.updatedAt = Date.now()
     }
   }
@@ -266,6 +280,9 @@ export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = 
 
       // 兼容尚未刷新的旧版 PWA：无异步标记时保留原同步响应结构
       await completion
+      if (job.status === 'cancelled') {
+        return res.status(200).json({ ok: false, error: 'cancelled by user' })
+      }
       if (job.status === 'error') {
         return res.status(job.statusCode).json({ ok: false, error: job.error })
       }
@@ -276,7 +293,7 @@ export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = 
     }
   })
 
-  /** 查询当前用户的对话任务；完成前返回 running，完成后返回最终回复 */
+  /** 查询当前用户的对话任务；完成前返回 running 与执行阶段，完成后返回最终回复 */
   router.get('/chat/jobs/:id', requireAuth, (req, res) => {
     gcChatJobs()
     const job = chatJobs.get(req.params.id)
@@ -290,11 +307,27 @@ export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = 
       status: job.status,
       contextId: job.contextId,
       reply: job.status === 'done' ? job.reply : undefined,
+      phase: job.status === 'running' ? job.monitor?.phase() ?? 'waiting' : undefined,
     }
     if (job.status === 'error') {
       return res.status(job.statusCode).json({ ok: false, error: job.error, data })
     }
     res.status(200).json({ ok: true, data })
+  })
+
+  /** 取消当前用户的运行中任务：终止 agent 子进程，任务以 cancelled 收尾 */
+  router.post('/chat/jobs/:id/cancel', requireAuth, (req, res) => {
+    const job = chatJobs.get(req.params.id)
+    if (!job) return res.status(404).json({ ok: false, error: 'chat job not found' })
+    if (job.username !== req.user.username) {
+      return res.status(403).json({ ok: false, error: 'chat job owner mismatch' })
+    }
+    if (job.status !== 'running') {
+      return res.status(200).json({ ok: true, data: { jobId: job.id, status: job.status } })
+    }
+    job.cancel?.()
+    job.status = 'cancelling'
+    res.status(200).json({ ok: true, data: { jobId: job.id, status: 'cancelling' } })
   })
 
   return router

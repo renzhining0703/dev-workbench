@@ -1,8 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  AgentCancelledError,
   AgentReplyValidationError,
   hasToolOutputFailureClaim,
+  observeTurnActivity,
+  phaseFromActivity,
   runAgentTurn,
   summarizeToolResults,
   unsupportedToolOutputClaim,
@@ -80,4 +83,46 @@ test('回复校验：正常回复或真实图片结果不触发纠错', async ()
   const result = await runAgentTurn({ message: '读取', sessionKey: 'wb-ui-test', timeoutMs: 5000, turnRunner })
   assert.equal(result.reply, '工具结果里有图片附件。')
   assert.equal(calls, 1)
+})
+
+test('活动阶段：日志增量统计工具调用，映射 waiting/tooling/composing', () => {
+  const jsonl = [
+    JSON.stringify({ timestamp: '2026-11-23T08:00:00.000Z', message: { role: 'user', content: [{ type: 'text', text: '统计 11 月' }] } }),
+    JSON.stringify({ timestamp: '2026-11-23T08:00:01.000Z', message: { role: 'assistant', content: [{ type: 'toolCall', name: 'exec' }] } }),
+    JSON.stringify({ timestamp: '2026-11-23T08:00:03.000Z', message: { role: 'toolResult', content: [{ type: 'text', text: 'ok' }] } }),
+    '{half-line',
+  ].join('\n')
+  const activity = observeTurnActivity(jsonl)
+  assert.equal(activity.toolCalls, 1)
+  assert.equal(activity.lastEventAt, Date.parse('2026-11-23T08:00:03.000Z'))
+  const now = activity.lastEventAt
+  assert.equal(phaseFromActivity({ toolCalls: 0, lastEventAt: 0 }, now), 'waiting')
+  assert.equal(phaseFromActivity(activity, now + 5000), 'tooling')
+  assert.equal(phaseFromActivity(activity, now + 10000), 'composing')
+})
+
+test('取消：运行中的 turn 收到 abort 信号后抛出 AgentCancelledError', async () => {
+  const controller = new AbortController()
+  const turnRunner = (args) => new Promise((resolve, reject) => {
+    args.signal?.addEventListener('abort', () => reject(new AgentCancelledError('cancelled by user')), { once: true })
+  })
+  const pending = runAgentTurn({
+    message: '统计',
+    sessionKey: 'wb-ui-test',
+    timeoutMs: 5000,
+    turnRunner,
+    signal: controller.signal,
+  })
+  setTimeout(() => controller.abort(), 20)
+  await assert.rejects(pending, AgentCancelledError)
+})
+
+test('取消：已 abort 的信号在进入纠错轮前直接抛取消错误', async () => {
+  const controller = new AbortController()
+  controller.abort()
+  const turnRunner = async () => ({ reply: '工具输出只返回图片。', toolResults: textOnly })
+  await assert.rejects(
+    runAgentTurn({ message: '统计', sessionKey: 'wb-ui-test', timeoutMs: 5000, turnRunner, signal: controller.signal }),
+    AgentCancelledError,
+  )
 })

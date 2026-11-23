@@ -1346,6 +1346,16 @@ html.dark .wb-pill.active { background: var(--wb-brand-500); }
   .ai-panel-overlay, .ai-panel-dialog, .ai-thinking-dot { animation: none; }
 }
 
+/* 用户消息操作行（复制/编辑）：悬浮能力的设备（PC）默认隐藏、悬浮气泡或聚焦时显示；
+   触屏设备无 hover，常显保证可点 */
+.msg-actions { opacity: 1; transition: opacity 150ms ease-out; }
+@media (hover: hover) and (pointer: fine) {
+  .msg-actions { opacity: 0; }
+  .group:hover .msg-actions,
+  .msg-actions:hover,
+  .group:focus-within .msg-actions { opacity: 1; }
+}
+
 /* 今日概览 */
 .wb-hero {
   position: relative; overflow: hidden;

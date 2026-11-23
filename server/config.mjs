@@ -118,8 +118,8 @@ export function loadConfig(env = process.env) {
     aiContextTtlMinutes: parseInt10(env, 'AI_CONTEXT_TTL_MINUTES', 30),
     aiChatTimeoutMs: parseInt10(env, 'AI_CHAT_TIMEOUT_MS', 300000),
     aiChatRatePerMin: parseInt10(env, 'AI_CHAT_RATE_PER_MIN', 10),
-    // 面板独立使用轻量升级档，不改变小朵其他会话和 cron 的默认模型
-    aiModel: envOrDefault(env, 'AI_MODEL', 'zhipu/glm-5.3-flash'),
+    // 面板独立模型可经 AI_MODEL 覆盖；默认换回 gateway 主档 deepseek-flash（2026-11-23 用户指定），服务端事实硬校验继续保留
+    aiModel: envOrDefault(env, 'AI_MODEL', 'custom_deepseek/deepseek-flash'),
     aiOpenclawBin: envOrDefault(env, 'AI_OPENCLAW_BIN', '/root/.local/share/pnpm/openclaw'),
     aiPathPrefix: envOrDefault(env, 'AI_PATH_PREFIX', '/root/.nvm/versions/node/v22.23.5/bin:/root/.local/share/pnpm'),
   }
