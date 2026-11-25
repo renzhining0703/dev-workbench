@@ -24,6 +24,7 @@ import { SessionStore } from './store/sessions.mjs'
 import { SnapshotStore } from './store/snapshots.mjs'
 import { PushSubscriptionStore } from './store/push-subscriptions.mjs'
 import { AiContextStore } from './store/ai-contexts.mjs'
+import { AiChatHistoryStore } from './store/ai-chat-history.mjs'
 import { createApp } from './app.mjs'
 import { runStartup } from './startup.mjs'
 
@@ -34,7 +35,8 @@ const sessionStore = new SessionStore(db)
 const snapshotStore = new SnapshotStore(db)
 const pushStore = new PushSubscriptionStore(db)
 const aiStore = new AiContextStore(db)
-const app = createApp({ config, userStore, sessionStore, snapshotStore, pushStore, aiStore })
+const aiHistoryStore = new AiChatHistoryStore(db)
+const app = createApp({ config, userStore, sessionStore, snapshotStore, pushStore, aiStore, aiHistoryStore })
 
 const server = app.listen(config.port, config.host, () => {
   // 启动钩子放在 listen 成功之后；端口冲突不会留下半初始化的数据表

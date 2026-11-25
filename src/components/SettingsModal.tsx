@@ -156,6 +156,35 @@ function GeneralPanel() {
           💡 此设置会同步到云端，所有设备共享。
         </p>
       </section>
+
+      <section>
+        <div className="mb-2">
+          <h4 className="text-sm font-semibold" style={{ color: 'var(--wb-ink)' }}>
+            添加到桌面
+          </h4>
+          <p className="mt-0.5 text-xs leading-relaxed" style={{ color: 'var(--wb-ink-3)' }}>
+            把工作台加到手机桌面，点图标直达，不用每次敲地址。当前为 IP 直连，添加的是快捷方式（浏览器内打开）；
+            以后换绑域名并启用 HTTPS 后，会自动升级为独立 App 窗口（PWA），无需重新添加。
+          </p>
+        </div>
+        <div className="wb-set-card">
+          <div className="wb-set-row">
+            <span className="min-w-0 flex-1 text-sm" style={{ color: 'var(--wb-ink-2)' }}>
+              安卓：浏览器菜单（右上角 ···）→「添加到主屏幕」
+            </span>
+          </div>
+          <div className="wb-set-row">
+            <span className="min-w-0 flex-1 text-sm" style={{ color: 'var(--wb-ink-2)' }}>
+              iPhone / iPad：Safari 底部分享按钮 →「添加到主屏幕」
+            </span>
+          </div>
+          <div className="wb-set-row">
+            <span className="min-w-0 flex-1 text-sm" style={{ color: 'var(--wb-ink-2)' }}>
+              电脑：Chrome / Edge 地址栏右侧「安装」图标
+            </span>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

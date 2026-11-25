@@ -198,3 +198,39 @@ export async function cancelAiChat(token: string, jobId: string): Promise<string
   )
   return data.status
 }
+
+/** 面板历史消息（与服务端同步的最小结构，本地 ChatMsg 的子集） */
+export interface AiHistoryMessage {
+  id: number
+  role: 'user' | 'assistant'
+  text: string
+  ctxLabel?: string
+  error?: boolean
+  retryText?: string
+}
+
+export interface AiHistory {
+  messages: AiHistoryMessage[]
+  /** 服务端最近一次写入时间（ISO），作为跨端 LWW 基准 */
+  updatedAt: string | null
+}
+
+/** 读取当前用户的面板历史（另一台设备最近的对话） */
+export async function getAiHistory(token: string): Promise<AiHistory> {
+  return request<AiHistory>(token, '/history', { method: 'GET' })
+}
+
+/** 覆盖保存面板历史，返回服务端写入时间 */
+export async function saveAiHistory(token: string, messages: AiHistoryMessage[]): Promise<string> {
+  const data = await request<{ updatedAt: string }>(token, '/history', {
+    method: 'PUT',
+    body: JSON.stringify({ messages }),
+  })
+  return data.updatedAt
+}
+
+/** 清除面板历史（清空会话时调用），返回服务端写入时间 */
+export async function clearAiHistory(token: string): Promise<string> {
+  const data = await request<{ updatedAt: string }>(token, '/history', { method: 'DELETE' })
+  return data.updatedAt
+}

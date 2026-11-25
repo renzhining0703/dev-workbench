@@ -5,7 +5,8 @@
  *   - mount/focus/visibilitychange → pull（服务端权威胜出，覆盖本地）
  *   - mutation 后 → schedulePush（300ms debounce）
  *   - 30s interval → push（pendingChanges 时才推）
- *   - pagehide/beforeunload → sendBeacon（fire-and-forget，未登录时跳过）
+ *   - visibilitychange → 可见时 pull；隐藏且有未推变更时 push（大快照靠这条）
+ *   - pagehide/beforeunload → keepalive fetch push（兜底，仅 ≤64KB 且有待推变更时发，未登录时跳过）
  *
  * 鉴权：
  *   - token 由 startSync 调用方注入（setSession）；fetch 时通过 tokenGetter 读取
@@ -149,6 +150,8 @@ export interface SyncHandle {
 
 const POLL_INTERVAL_MS = 30_000
 const DEBOUNCE_MS = 300
+/** 浏览器对 keepalive 请求体的上限是 64KiB，超过会被直接拒绝 */
+const KEEPALIVE_MAX_BYTES = 60_000
 
 export function startSync(adapter: Adapter, options: Options = {}): SyncHandle {
   const debounceMs = options.debounceMs ?? DEBOUNCE_MS
@@ -173,6 +176,8 @@ export function startSync(adapter: Adapter, options: Options = {}): SyncHandle {
   let pushTimer: number | null = null
   let inflight: Promise<void> | null = null
   let lastBeaconBody: string | null = null
+  /** 本次页面隐藏期间已发过卸载兜底推送（页面重新可见后重置） */
+  let unloadPushSent = false
   /** 已触发过 401 提示，避免重复 toast */
   let unauthorizedFired = false
 
@@ -257,20 +262,42 @@ export function startSync(adapter: Adapter, options: Options = {}): SyncHandle {
   const onFocus = () => {
     if (session.token) void doPull()
   }
+  /** 页面隐藏时用普通请求冲掉待推变更（不受 keepalive 64KB 请求体上限约束；移动端切后台/锁屏也走这里） */
   const onVisibility = () => {
-    if (document.visibilityState === 'visible' && session.token) void doPull()
+    if (!session.token) return
+    if (document.visibilityState === 'visible') {
+      unloadPushSent = false
+      void doPull()
+    } else if (state.pendingChanges) {
+      void doPush()
+    }
   }
 
   const onPageHide = () => {
     if (!SYNC_ENABLED) return
     if (!session.token) return
+    // 没有待推变更就不发；pagehide 与 beforeunload 会先后各触发一次，只发一次
+    if (!state.pendingChanges || unloadPushSent) return
     if (!lastBeaconBody) {
       const snap = { ...adapter.getSnapshot(), clientTs: new Date().toISOString() }
       lastBeaconBody = JSON.stringify(snap)
     }
     try {
-      const blob = new Blob([lastBeaconBody], { type: 'application/json' })
-      navigator.sendBeacon?.(`${SYNC_API}/push`, blob)
+      if (new Blob([lastBeaconBody]).size > KEEPALIVE_MAX_BYTES) return // 超限的请求浏览器会直接拒绝，交给隐藏时的普通推送
+      unloadPushSent = true
+      // sendBeacon 无法携带 Authorization（服务端必返 401），改用 keepalive fetch 保留「页面卸载后仍完成」语义
+      void fetch(`${SYNC_API}/push`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: lastBeaconBody,
+        credentials: 'omit',
+        keepalive: true,
+      }).catch(() => {
+        /* 卸载阶段静默 */
+      })
     } catch {
       /* 静默 */
     }

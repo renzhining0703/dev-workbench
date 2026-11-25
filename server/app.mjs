@@ -23,7 +23,7 @@ import { requireAuth } from './middleware/auth.mjs'
  * @param {import('./store/ai-contexts.mjs').AiContextStore} [deps.aiStore] 缺省时 /api/ai 不挂载
  * @param {import('./lib/agent-client.mjs').runAgentTurn} [deps.aiRunner] 测试注入用，缺省真实 CLI 调用
  */
-export function createApp({ config, userStore, sessionStore, snapshotStore, pushStore, aiStore, aiRunner }) {
+export function createApp({ config, userStore, sessionStore, snapshotStore, pushStore, aiStore, aiHistoryStore, aiRunner }) {
   const app = express()
   app.disable('x-powered-by')
   // nginx 反代一层；express-rate-limit 依赖它还原真实客户端 IP
@@ -69,7 +69,7 @@ export function createApp({ config, userStore, sessionStore, snapshotStore, push
     )
   }
   if (aiStore) {
-    app.use('/api/ai', createAiRouter({ config, aiStore, requireAuth: auth, runAgentTurnFn: aiRunner }))
+    app.use('/api/ai', createAiRouter({ config, aiStore, aiHistoryStore, requireAuth: auth, runAgentTurnFn: aiRunner }))
   }
 
   // ---- 404（v1：{ok:false,error:'not found'}）----

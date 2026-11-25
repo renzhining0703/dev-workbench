@@ -10,12 +10,12 @@
  *           不需要额外 checkpoint，也不会长时间锁住主连接的写操作；
  *           目标文件必须不存在（脚本用 时间戳 命名，天然不冲突）。
  *
- * 保留策略：RETENTION_DAYS（默认 7）天前的备份按文件名时间戳清理。
+ * 保留策略：保留最近 RETENTION_DAYS 份（变量名沿用 RETENTION_DAYS，实现按份数而非天数）。
  *           只清理本脚本产生的 sync-*.db 文件，不碰其它。
  *
  * 环境变量（均可选，缺省走 config.mjs）：
  *   BACKUP_DIR             备份目录（默认 <dataDir>/backups/）
- *   BACKUP_RETENTION_DAYS  保留天数（默认 7）
+ *   BACKUP_RETENTION_DAYS  保留份数（默认 7；名称沿用旧配置键，实现按份数清理）
  *   DATA_DIR / DB_FILE     见 server/config.mjs
  */
 import { DatabaseSync } from 'node:sqlite'
@@ -56,7 +56,7 @@ function sqlQuote(s) {
   return "'" + String(s).replace(/'/g, "''") + "'"
 }
 
-/** 清理超期备份（仅匹配 sync-*.db），保留最近 RETENTION_DAYS 个 */
+/** 清理超期备份（仅匹配 sync-*.db），保留最近 RETENTION_DAYS 份 */
 function pruneOldBackups(dir, keep) {
   if (!existsSync(dir)) return { kept: 0, removed: 0 }
   const re = /^sync-\d{8}-\d{6}\.db$/
@@ -132,7 +132,7 @@ function main() {
   const { kept, removed } = pruneOldBackups(BACKUP_DIR, RETENTION_DAYS)
   const sizeKb = Math.max(1, Math.round((statSync(dest).size || 1) / 1024))
   console.log(
-    `[backup] ✓ ${dest} (${sizeKb}KB) | 保留 ${kept} 份 | 清理 ${removed} 份 | 阈值 ${RETENTION_DAYS} 天`,
+    `[backup] ✓ ${dest} (${sizeKb}KB) | 保留 ${kept} 份 | 清理 ${removed} 份 | 阈值 ${RETENTION_DAYS} 份`,
   )
 
   const oc = backupOpenclawConfigs()

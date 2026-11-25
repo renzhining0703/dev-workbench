@@ -16,6 +16,7 @@ import { UserStore } from '../store/users.mjs'
 import { SessionStore } from '../store/sessions.mjs'
 import { SnapshotStore } from '../store/snapshots.mjs'
 import { AiContextStore } from '../store/ai-contexts.mjs'
+import { AiChatHistoryStore } from '../store/ai-chat-history.mjs'
 import { createApp } from '../app.mjs'
 import { genSalt, hashPassword } from '../lib/password.mjs'
 import {
@@ -103,6 +104,7 @@ function setupApp() {
   const sessionStore = new SessionStore(db)
   const snapshotStore = new SnapshotStore(db)
   const aiStore = new AiContextStore(db)
+  const aiHistoryStore = new AiChatHistoryStore(db)
   const app = createApp({
     config: {
       allowedOrigins: ['http://localhost:5173'],
@@ -120,6 +122,7 @@ function setupApp() {
     sessionStore,
     snapshotStore,
     aiStore,
+    aiHistoryStore,
   }).listen(0)
   const base = `http://127.0.0.1:${app.address().port}`
   const cleanup = () =>
@@ -540,5 +543,61 @@ test('ai chat 取消：运行中任务可取消并返回 cancelled；归属校�
         resolve()
       })
     })
+  }
+})
+
+test('ai history：保存/读取/清空闭环；非法条目清洗、20 条截断与归属隔离', async () => {
+  const { base, cleanup } = setupApp()
+  try {
+    const token = await registerAndLogin(base, 'henry', 'passw0rd-henry')
+    const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+
+    // 初始为空
+    const empty = await (await fetch(`${base}/api/ai/history`, { headers: auth })).json()
+    assert.deepEqual(empty.data, { messages: [], updatedAt: null })
+
+    // 保存：混入非法条目 + 超过 20 条
+    const messages = [
+      ...Array.from({ length: 22 }, (_, i) => ({ id: i + 1, role: i % 2 ? 'user' : 'assistant', text: `消息${i + 1}` })),
+      null,
+      { role: 'user', text: '无 id' },
+      { id: 99, role: 'admin', text: '角色非法' },
+      { id: 100, role: 'user', text: '' },
+    ]
+    const put = await fetch(`${base}/api/ai/history`, {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify({ messages }),
+    })
+    assert.equal(put.status, 200)
+    const { data: putData } = await put.json()
+    assert.ok(typeof putData.updatedAt === 'string' && !Number.isNaN(Date.parse(putData.updatedAt)))
+
+    const got = await (await fetch(`${base}/api/ai/history`, { headers: auth })).json()
+    assert.equal(got.data.messages.length, 20)
+    assert.equal(got.data.messages[0].text, '消息3') // 22 条中截取最近 20 条
+    assert.equal(got.data.messages[19].text, '消息22')
+    assert.equal(got.data.updatedAt, putData.updatedAt)
+
+    // 归属隔离：其他用户看不到 henry 的历史
+    const other = await registerAndLogin(base, 'henry_peer', 'passw0rd-henry-peer')
+    const otherGot = await (await fetch(`${base}/api/ai/history`, { headers: { Authorization: `Bearer ${other}` } })).json()
+    assert.equal(otherGot.data.messages.length, 0)
+
+    // 清空：返回新的 updatedAt，且新于保存时间
+    const del = await fetch(`${base}/api/ai/history`, { method: 'DELETE', headers: auth })
+    assert.equal(del.status, 200)
+    const cleared = await (await fetch(`${base}/api/ai/history`, { headers: auth })).json()
+    assert.deepEqual(cleared.data, { messages: [], updatedAt: null })
+
+    // 非 JSON 数组 → 400
+    const bad = await fetch(`${base}/api/ai/history`, {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify({ messages: 'oops' }),
+    })
+    assert.equal(bad.status, 400)
+  } finally {
+    await cleanup()
   }
 })

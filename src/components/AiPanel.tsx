@@ -11,7 +11,10 @@ import type { Requirement, TodoItem } from '../types'
 import { useAuth } from '../store/AuthContext'
 import {
   cancelAiChat,
+  clearAiHistory,
   createAiContext,
+  getAiHistory,
+  saveAiHistory,
   sendAiChat,
   snapshotFromRequirement,
   snapshotFromTodo,
@@ -352,6 +355,8 @@ export function AiPanel() {
   const sendingRef = useRef(false)
   /** 消息列表镜像，供稳定回调读取最新内容而不触发 memo 重渲染 */
   const messagesRef = useRef<ChatMsg[]>([])
+  /** 本地已知的服务端最近写入时间（ISO），跨端 LWW 基准 */
+  const localUpdatedAtRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   /** 当前运行中任务 id，用于取消；发送结束即清空 */
   const jobIdRef = useRef<string | null>(null)
@@ -361,37 +366,62 @@ export function AiPanel() {
   const stickToBottom = useRef(true)
   const sendRef = useRef<(text: string) => Promise<void>>(async () => {})
 
-  // 刷新后恢复当前用户最近 20 条面板消息
+  // 打开面板：先取本地快照立即展示，再与服务端历史做 LWW 对账（跨端同步）
   useEffect(() => {
     if (!storageKey) {
       setMessages([])
       return
     }
+    let local: ChatMsg[] = []
+    let localUpdatedAt: string | null = null
     const raw = localStorage.getItem(storageKey)
-    if (!raw) {
-      setMessages([])
-      return
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        // 旧版为纯数组格式；新版为 { messages, updatedAt }
+        if (Array.isArray(parsed)) local = parsed.slice(-MESSAGE_LIMIT)
+        else if (parsed && Array.isArray(parsed.messages)) {
+          local = parsed.messages.slice(-MESSAGE_LIMIT)
+          localUpdatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null
+        }
+      } catch {
+        local = []
+      }
     }
-    try {
-      const parsed = JSON.parse(raw) as ChatMsg[]
-      const list = Array.isArray(parsed) ? parsed.slice(-MESSAGE_LIMIT) : []
-      setMessages(list)
-      nextMessageId.current = list.reduce((max, m) => Math.max(max, m.id), 0) + 1
-    } catch {
-      setMessages([])
-      nextMessageId.current = 1
+    localUpdatedAtRef.current = localUpdatedAt
+    messagesRef.current = local
+    setMessages(local)
+    nextMessageId.current = local.reduce((max, m) => Math.max(max, m.id), 0) + 1
+    if (!token) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const server = await getAiHistory(token)
+        if (cancelled) return
+        const localTs = localUpdatedAt ? Date.parse(localUpdatedAt) || 0 : 0
+        const serverTs = server.updatedAt ? Date.parse(server.updatedAt) || 0 : 0
+        if (serverTs > localTs && server.messages.length > 0) {
+          // 服务端较新（另一台设备活跃过）→ 采用服务端列表
+          const list = server.messages.slice(-MESSAGE_LIMIT) as ChatMsg[]
+          localUpdatedAtRef.current = server.updatedAt
+          messagesRef.current = list
+          localStorage.setItem(storageKey, JSON.stringify({ messages: list, updatedAt: server.updatedAt }))
+          setMessages(list)
+          nextMessageId.current = list.reduce((max, m) => Math.max(max, m.id), 0) + 1
+        } else if (localTs > serverTs && local.length > 0) {
+          // 本地较新（本机最近活跃过）→ 推送服务端
+          const updatedAt = await saveAiHistory(token, local.slice(-MESSAGE_LIMIT))
+          localUpdatedAtRef.current = updatedAt
+          localStorage.setItem(storageKey, JSON.stringify({ messages: local, updatedAt }))
+        }
+      } catch {
+        // 服务端不可用时沿用本地，下次打开再对账
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-  }, [storageKey])
-
-  // 消息变化时写回本地，只保留最近 20 条
-  useEffect(() => {
-    if (!storageKey) return
-    if (messages.length === 0) {
-      localStorage.removeItem(storageKey)
-      return
-    }
-    localStorage.setItem(storageKey, JSON.stringify(messages.slice(-MESSAGE_LIMIT)))
-  }, [messages, storageKey])
+  }, [storageKey, token])
 
   // 仅打开时订阅焦点变化，关闭后面板不响应工作台更新
   useEffect(() => {
@@ -468,15 +498,6 @@ export function AiPanel() {
     setOpen((value) => !value)
   }, [])
 
-  /** 清空当前显示的前端会话并同步清掉本地存储，不影响 agent 服务端历史 */
-  const clearConversation = useCallback(() => {
-    if (sendingRef.current) return
-    setMessages([])
-    setInput('')
-    nextMessageId.current = 1
-    if (storageKey) localStorage.removeItem(storageKey)
-  }, [storageKey])
-
   /** 组装本轮最小化快照与展示标签 */
   const buildSnapshot = useCallback((): { snapshot: AiContextSnapshot; label: string } | null => {
     const snapshot: AiContextSnapshot = {}
@@ -497,11 +518,44 @@ export function AiPanel() {
     return { snapshot, label: parts.join(' · ') }
   }, [focusReq, focusTodo, selection, useReq, useTodo, useSelection])
 
+  /** 统一消息写入：更新状态 + 本地持久化 + 服务端同步（跨端 LWW，整体覆盖） */
+  const applyMessages = useCallback((updater: ChatMsg[] | ((prev: ChatMsg[]) => ChatMsg[])) => {
+    const next = typeof updater === 'function' ? updater(messagesRef.current) : updater
+    const list = next.slice(-MESSAGE_LIMIT)
+    messagesRef.current = next
+    setMessages(next)
+    if (storageKey) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({ messages: list, updatedAt: localUpdatedAtRef.current }))
+      } catch {
+        // 本地写失败不影响对话主流程
+      }
+    }
+    if (!token) return
+    if (list.length === 0) {
+      void clearAiHistory(token)
+        .then((updatedAt) => { localUpdatedAtRef.current = updatedAt })
+        .catch(() => {})
+    } else {
+      void saveAiHistory(token, list)
+        .then((updatedAt) => { localUpdatedAtRef.current = updatedAt })
+        .catch(() => {})
+    }
+  }, [storageKey, token])
+
+  /** 清空当前显示的前端会话并同步清掉本地与服务端历史，不影响 agent 会话上下文 */
+  const clearConversation = useCallback(() => {
+    if (sendingRef.current) return
+    applyMessages([])
+    setInput('')
+    nextMessageId.current = 1
+  }, [applyMessages])
+
   /** 发送指定文本并等待后台任务完成，可复用于失败重试 */
   const sendMessage = useCallback(async (text: string) => {
     if (!text || sendingRef.current) return
     if (!token) {
-      setMessages((items) => [...items, {
+      applyMessages((items) => [...items, {
         id: nextMessageId.current++,
         role: 'assistant',
         text: '本地模式或未登录，AI 面板不可用',
@@ -519,7 +573,7 @@ export function AiPanel() {
     stickToBottom.current = true
     setSending(true)
     setPhase('waiting')
-    setMessages((items) => [...items, {
+    applyMessages((items) => [...items, {
       id: nextMessageId.current++,
       role: 'user',
       text,
@@ -535,14 +589,14 @@ export function AiPanel() {
         onJobId: (id) => { jobIdRef.current = id },
         onPhase: setPhase,
       })
-      setMessages((items) => [...items, { id: nextMessageId.current++, role: 'assistant', text: reply }])
+      applyMessages((items) => [...items, { id: nextMessageId.current++, role: 'assistant', text: reply }])
     } catch (error) {
       // 主动取消（含服务端已标记取消）→ 记录一条中性提示；组件卸载等被动中止保持静默
       const cancelledByUser =
         (error instanceof DOMException && error.name === 'AbortError' && cancelRequestedRef.current) ||
         (error instanceof AiPanelError && error.message === '用户已取消')
       if (cancelledByUser) {
-        setMessages((items) => [...items, {
+        applyMessages((items) => [...items, {
           id: nextMessageId.current++,
           role: 'assistant',
           text: '已取消本次回复（用户已取消）',
@@ -551,7 +605,7 @@ export function AiPanel() {
         return
       } else {
         const message = error instanceof AiPanelError ? error.message : '网络错误，请检查连接后重试'
-        setMessages((items) => [...items, {
+        applyMessages((items) => [...items, {
           id: nextMessageId.current++,
           role: 'assistant',
           text: message,
@@ -567,7 +621,7 @@ export function AiPanel() {
       setSending(false)
       setPhase('waiting')
     }
-  }, [buildSnapshot, token])
+  }, [applyMessages, buildSnapshot, token])
 
   sendRef.current = sendMessage
 
@@ -620,7 +674,7 @@ export function AiPanel() {
     const index = messagesRef.current.findIndex((m) => m.id === id)
     if (index < 0) return
     setEditingId(null)
-    setMessages(messagesRef.current.slice(0, index))
+    applyMessages(messagesRef.current.slice(0, index))
     void sendRef.current(text)
   }, [])
 

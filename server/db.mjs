@@ -12,7 +12,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS users (
@@ -89,6 +89,19 @@ CREATE INDEX IF NOT EXISTS idx_ai_contexts_username ON ai_contexts(username);
 `
 
 /**
+ * v5：AI 面板聊天历史（跨端同步）
+ * - 每用户一行，messages 为最近 20 条消息 JSON，updated_at 为服务端写入时间（LWW 依据）
+ * - 整体覆盖式保存：最近活跃设备的列表胜出，另一端打开面板时自动拉取
+ */
+const SCHEMA_V5 = `
+CREATE TABLE IF NOT EXISTS ai_chat_history (
+  username   TEXT PRIMARY KEY REFERENCES users(username) ON DELETE CASCADE,
+  messages   TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`
+
+/**
  * 打开（或创建）数据库并应用 schema。
  * @param {string} file 数据库文件路径
  * @returns {import('node:sqlite').DatabaseSync}
@@ -111,6 +124,7 @@ const MIGRATION_STEPS = [
   { version: 2, sql: SCHEMA_V2 },
   { version: 3, sql: SCHEMA_V3 },
   { version: 4, sql: SCHEMA_V4 },
+  { version: 5, sql: SCHEMA_V5 },
 ]
 
 function migrate(db) {

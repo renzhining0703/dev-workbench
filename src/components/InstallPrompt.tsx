@@ -24,7 +24,7 @@ const DISMISS_KEY_GENERIC = 'pwa:dismissed-generic'
 // 设备/环境检测（SSR 安全）
 function detectEnv() {
   if (typeof navigator === 'undefined') {
-    return { isIOS: false, isWeChat: false, isStandalone: false }
+    return { isIOS: false, isWeChat: false, isStandalone: false, isSecureContext: true }
   }
   const ua = navigator.userAgent
   return {
@@ -35,6 +35,8 @@ function detectEnv() {
       (navigator as Navigator & { standalone?: boolean }).standalone === true ||
       // Android/Chrome standalone
       window.matchMedia('(display-mode: standalone)').matches,
+    // HTTP+IP 直连时为 false：beforeinstallprompt 与 SW 均不可用，只能走快捷方式引导
+    isSecureContext: window.isSecureContext === true,
   }
 }
 
@@ -97,13 +99,23 @@ export function InstallPrompt() {
     }
 
     // 标准 Chromium 浏览器（Chrome / Edge / Samsung / Brave 等）
-    // Chrome 默认要用户停留 ≥30s 才触发 beforeinstallprompt，等 30s 再决定：
-    //   - 收到了 → PWA 可装 → Chrome 浮窗（带"安装"按钮）
-    //   - 没收到 → PWA 不可装 → 通用引导条兜底（教用户去菜单手动加）
+    // HTTP+IP 直连时页面非安全上下文，beforeinstallprompt 必然不触发：
+    // 跳过 30s 等待，1.5s 后直接弹「添加到主屏幕」快捷方式引导。
     const chromeDismissed = !!localStorage.getItem(DISMISS_KEY_CHROME)
     const genericDismissed = !!localStorage.getItem(DISMISS_KEY_GENERIC)
     if (chromeDismissed && genericDismissed) return
 
+    if (!env.isSecureContext) {
+      if (!genericDismissed) {
+        const t = window.setTimeout(() => setShowGenericBar(true), 1500)
+        return () => window.clearTimeout(t)
+      }
+      return
+    }
+
+    // 安全上下文：Chrome 默认要用户停留 ≥30s 才触发 beforeinstallprompt，等 30s 再决定：
+    //   - 收到了 → PWA 可装 → Chrome 浮窗（带"安装"按钮）
+    //   - 没收到 → PWA 不可装 → 通用引导条兜底（教用户去菜单手动加）
     let gotEvent = false
     const onBeforeInstall = (e: Event) => {
       gotEvent = true
@@ -314,7 +326,7 @@ export function InstallPrompt() {
             <div className="flex-1 text-sm" style={{ color: 'var(--wb-ink)' }}>
               <p className="font-medium">添加到桌面</p>
               <p className="text-xs" style={{ color: 'var(--wb-ink-2)' }}>
-                浏览器菜单（右上角 ···）→ 添加到主屏幕
+                浏览器菜单（右上角 ···）→ 添加到主屏幕，生成桌面图标，点图标直达工作台
               </p>
             </div>
             <button

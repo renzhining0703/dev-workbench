@@ -59,6 +59,18 @@ test('mergeByUpdatedAt：两边都缺时间戳 → 时间戳按 0 处理，服�
   assert.equal(mergeByUpdatedAt(remote, local)[0].title, 'server')
 })
 
+test('mergeByUpdatedAt：非法时间戳按 0 处理，合法且更大的本地胜（与前端一致防不收敛）', () => {
+  const remote = [{ id: 'a', title: 'bad-server', updatedAt: 'not-a-date' }]
+  const local = [{ id: 'a', title: 'new-local', updatedAt: T(2) }]
+  assert.equal(mergeByUpdatedAt(remote, local)[0].title, 'new-local')
+})
+
+test('mergeByUpdatedAt：两边时间戳都非法 → 都按 0，服务端胜', () => {
+  const remote = [{ id: 'a', title: 'server', updatedAt: 'not-a-date' }]
+  const local = [{ id: 'a', title: 'client', createdAt: 'also-bad' }]
+  assert.equal(mergeByUpdatedAt(remote, local)[0].title, 'server')
+})
+
 test('mergeSettings：本地键覆盖，服务端独有键保留', () => {
   assert.deepEqual(
     mergeSettings({ a: 1, keep: 2 }, { a: 9, extra: 3 }),

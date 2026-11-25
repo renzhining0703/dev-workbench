@@ -40,7 +40,13 @@ export function normalizeSnapshot(parsed) {
  * 基于 updatedAt 的字段级 LWW（v1 mergeByUpdatedAt 原样平移）
  * - 本地有而服务端没有 → 本地胜（新增）
  * - 两边都有 → updatedAt（缺则 createdAt）大的胜；相等 → 服务端胜
+ * - 时间戳非法/无法解析 → 按 0（与前端 merge.ts 一致，防两端对 NaN 比较永不收敛）
  */
+function itemTs(item) {
+  const t = new Date(item.updatedAt ?? item.createdAt ?? 0).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
 export function mergeByUpdatedAt(remote, local) {
   const byId = new Map()
   const remoteIds = new Set(remote.map((r) => r.id))
@@ -55,9 +61,7 @@ export function mergeByUpdatedAt(remote, local) {
       continue
     }
     const r = byId.get(l.id)
-    const lts = new Date(l.updatedAt ?? l.createdAt ?? 0).getTime()
-    const rts = new Date(r.updatedAt ?? r.createdAt ?? 0).getTime()
-    if (lts > rts) byId.set(l.id, l)
+    if (itemTs(l) > itemTs(r)) byId.set(l.id, l)
   }
   return [...byId.values()]
 }

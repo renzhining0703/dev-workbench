@@ -75,15 +75,15 @@ function sessionKeyFor(username) {
   return `wb-ui-${safe || 'anonymous'}`
 }
 
-/** 面板消息 → agent 提示词（上下文只给签名 id，明文由 agent 主动换取） */
-function composePanelMessage({ username, nickname, text, contextId }) {
+/** 面板消息 → agent 提示词（上下文只给签名 id，明文由 agent 主动换取；TTL 与服务端配置保持一致） */
+function composePanelMessage({ username, nickname, text, contextId, ttlMinutes = 30 }) {
   const lines = [
     '【工作台面板消息】',
     `用户：${username}（${nickname}）`,
   ]
   if (contextId) {
     lines.push(
-      `上下文：${contextId}（含当前需求/项目/分支/选中内容，用 /root/.openclaw/workspace/scripts/wb-context-fetch.sh 获取；30 分钟内有效，多次可读）`,
+      `上下文：${contextId}（含当前需求/项目/分支/选中内容，用 /root/.openclaw/workspace/scripts/wb-context-fetch.sh 获取；${ttlMinutes} 分钟内有效，多次可读）`,
     )
   }
   lines.push(
@@ -111,7 +111,7 @@ function createRateLimiter(limitPerMin) {
   }
 }
 
-export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = runAgentTurn }) {
+export function createAiRouter({ config, aiStore, aiHistoryStore, requireAuth, runAgentTurnFn = runAgentTurn }) {
   const router = Router()
   const allowChat = createRateLimiter(config.aiChatRatePerMin ?? 10)
   const chatJobs = new Map()
@@ -266,6 +266,7 @@ export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = 
           nickname: req.user.nickname,
           text,
           contextId: contextId || undefined,
+          ttlMinutes: config.aiContextTtlMinutes ?? 30,
         }),
         sessionKey: sessionKeyFor(req.user.username),
         timeoutMs: config.aiChatTimeoutMs ?? 300000,
@@ -328,6 +329,53 @@ export function createAiRouter({ config, aiStore, requireAuth, runAgentTurnFn = 
     job.cancel?.()
     job.status = 'cancelling'
     res.status(200).json({ ok: true, data: { jobId: job.id, status: 'cancelling' } })
+  })
+
+  // ---- 聊天历史跨端同步（aiHistoryStore 未装配时跳过注册）----
+
+  /** 面板消息白名单清洗：先剔除非法条目，再保留最近 20 条 */
+  function sanitizeHistoryMessages(raw) {
+    if (!Array.isArray(raw)) return null
+    const valid = []
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue
+      const id = typeof item.id === 'number' && Number.isFinite(item.id) ? item.id : null
+      const role = item.role === 'user' || item.role === 'assistant' ? item.role : null
+      const text = typeof item.text === 'string' ? item.text.slice(0, 32000) : ''
+      if (id === null || !role || !text.trim()) continue
+      const msg = { id, role, text }
+      if (typeof item.ctxLabel === 'string' && item.ctxLabel) msg.ctxLabel = item.ctxLabel.slice(0, 300)
+      if (item.error === true) msg.error = true
+      if (typeof item.retryText === 'string' && item.retryText) msg.retryText = item.retryText.slice(0, 4000)
+      valid.push(msg)
+    }
+    return valid.slice(-20)
+  }
+
+  /** 读取当前用户的面板历史（跨端同步用） */
+  router.get('/history', requireAuth, (req, res) => {
+    const row = aiHistoryStore.get(req.user.username)
+    res.status(200).json({
+      ok: true,
+      data: row ?? { messages: [], updatedAt: null },
+    })
+  })
+
+  /** 覆盖保存当前用户的面板历史；返回服务端写入时间供本地做 LWW 基准 */
+  router.put('/history', requireAuth, (req, res) => {
+    const messages = sanitizeHistoryMessages(req.body?.messages)
+    if (messages === null) {
+      return res.status(400).json({ ok: false, error: 'messages must be an array' })
+    }
+    const updatedAt = new Date().toISOString()
+    aiHistoryStore.save(req.user.username, messages, updatedAt)
+    res.status(200).json({ ok: true, data: { updatedAt } })
+  })
+
+  /** 清除当前用户的面板历史（清空会话时调用） */
+  router.delete('/history', requireAuth, (req, res) => {
+    aiHistoryStore.remove(req.user.username)
+    res.status(200).json({ ok: true, data: { updatedAt: new Date().toISOString() } })
   })
 
   return router
