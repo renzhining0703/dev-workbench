@@ -34,8 +34,6 @@ import { ThemeProvider, useTheme } from './store/ThemeContext'
 import { findAutoArchiveTargets } from './lib/archive'
 import { countTodosByRequirement } from './lib/todos'
 import { parseImportData } from './lib/migrate'
-import { hasProjectInitFlag, markProjectInit } from './lib/storage'
-import { seedProjects } from './data/seedProjects'
 import { startSync, type SyncHandle } from './lib/sync'
 
 type Tab = 'today' | 'todo' | 'list' | 'stats' | 'timesheet' | 'passwords'
@@ -216,16 +214,6 @@ function AppInner({
       .catch(() => {
         /* 无导入文件或加载失败时静默跳过，不影响正常使用 */
       })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 首次启动初始化项目库：本地无项目且从未初始化过时，写入从历史需求提取的种子项目
-  // 注：sync 已在 mount 时拉过一次（pull），如果服务端有项目就用了服务端的，本地仍为空才走种子
-  useEffect(() => {
-    if (store.projects.length > 0) return
-    if (hasProjectInitFlag()) return
-    const ok = store.initProjects(seedProjects.map((p) => p.name))
-    if (ok) markProjectInit()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

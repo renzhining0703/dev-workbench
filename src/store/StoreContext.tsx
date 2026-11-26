@@ -138,8 +138,6 @@ interface Store {
   addProject: (name: string, moduleBased?: boolean) => { ok: boolean; error?: string }
   updateProject: (id: string, name: string, moduleBased?: boolean) => { ok: boolean; error?: string }
   removeProject: (id: string) => { ok: boolean; error?: string }
-  /** 首次启动写入种子项目，返回是否执行了写入 */
-  initProjects: (seed: string[]) => boolean
   /** 从备份恢复全部数据（覆盖现有），返回是否成功 */
   restoreAll: (data: BackupData) => boolean
   /**
@@ -519,22 +517,6 @@ export function StoreProvider({
     return commitProjects(next)
   }, [])
 
-  /** 首次启动写入种子项目（只执行一次，由 App 调用） */
-  const initProjects = useCallback(
-    (seed: string[]): boolean => {
-      if (projectsRef.current.length > 0) return false
-      const t = nowISO()
-      const next: Project[] = seed.map((name) => ({
-        id: uid(),
-        name,
-        createdAt: t,
-        updatedAt: t,
-      }))
-      return commitProjects(next).ok
-    },
-    [],
-  )
-
   /** 从备份恢复：覆盖现有全部数据 */
   const restoreAll = useCallback(
     (data: BackupData): boolean => {
@@ -846,7 +828,6 @@ export function StoreProvider({
       addProject,
       updateProject,
       removeProject,
-      initProjects,
       restoreAll,
       setArchiveMonths,
       applyRemote,
@@ -860,7 +841,7 @@ export function StoreProvider({
       addRequirement, updateRequirement, removeRequirement, restoreRequirement, importRequirements,
       addTodo, upsertPassword, removePassword, toggleTodo, updateTodo, removeTodo,
       addProject, updateProject, removeProject,
-      initProjects, restoreAll, setArchiveMonths, applyRemote, clearAll,
+      restoreAll, setArchiveMonths, applyRemote, clearAll,
     ],
   )
 

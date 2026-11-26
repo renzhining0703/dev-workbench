@@ -3,7 +3,6 @@ import type { PasswordEntry, Project, Requirement, TodoItem } from '../types'
 const REQ_KEY = 'dev-workbench:requirements'
 const TODO_KEY = 'dev-workbench:todos'
 const PROJ_KEY = 'dev-workbench:projects'
-const PROJ_INIT_KEY = 'dev-workbench:projects-initialized'
 const PASS_KEY = 'dev-workbench:passwords'
 
 function read<T>(key: string, fallback: T): T {
@@ -70,15 +69,6 @@ export function loadProjects(): Project[] {
 
 export function saveProjects(list: Project[]) {
   write(PROJ_KEY, list)
-}
-
-/** 是否已完成种子项目初始化（避免用户删光项目后又被自动填回） */
-export function hasProjectInitFlag(): boolean {
-  return localStorage.getItem(PROJ_INIT_KEY) === '1'
-}
-
-export function markProjectInit() {
-  localStorage.setItem(PROJ_INIT_KEY, '1')
 }
 
 /* ---------------- 待办仓储 ---------------- */
