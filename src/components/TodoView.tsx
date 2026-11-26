@@ -300,6 +300,7 @@ export function TodoView({
                 onRemove={onRemoveTodo}
                 reqName={t.requirementId ? requirements.find((r) => r.id === t.requirementId)?.name : undefined}
                 onOpenRequirement={onOpenRequirement}
+                requirements={requirements}
               />
             ))}
           </ul>

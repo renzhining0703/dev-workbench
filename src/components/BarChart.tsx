@@ -3,20 +3,25 @@ interface BarChartProps {
   height?: number
 }
 
+// 柱状图绘图区固定像素高度（数字占位约 16px 另计）
+const BAR_AREA = 140
+
 /**
  * SVG 柱状图：最近 N 个月每月数据
  * - 纯 div + flex 实现（更易主题适配）
- * - 高度按最大柱子等比例缩放
+ * - 柱子高度按像素计算（绘图区固定高度），避免百分比依赖父级高度链失效
+ * - 0 值月份画灰色 2px 基线，与「无数据」区分
  * - 颜色走 NOVA 令牌（--wb-brand-*），自动适配亮/暗主题
  */
-export function BarChart({ data, height = 180 }: BarChartProps) {
+export function BarChart({ data }: BarChartProps) {
   const max = Math.max(1, ...data.map((d) => d.count))
 
   return (
-    <div style={{ minHeight: height }}>
-      <div className="flex h-[calc(100%-1.75rem)] items-end gap-1.5 sm:gap-3">
+    <div>
+      <div className="flex items-end gap-1.5 sm:gap-3" style={{ height: BAR_AREA }}>
         {data.map((d, i) => {
-          const h = (d.count / max) * 100
+          // 像素高度：按最大柱等比缩放；0 值给 2px 灰基线
+          const barH = d.count > 0 ? Math.max(4, Math.round((d.count / max) * BAR_AREA)) : 2
           return (
             <div
               key={i}
@@ -32,10 +37,9 @@ export function BarChart({ data, height = 180 }: BarChartProps) {
               <div
                 className="w-full rounded-t-md"
                 style={{
-                  height: `${h}%`,
-                  minHeight: d.count > 0 ? 4 : 0,
-                  backgroundColor: 'var(--wb-brand-500)',
-                  opacity: 0.9,
+                  height: barH,
+                  backgroundColor: d.count > 0 ? 'var(--wb-brand-500)' : 'var(--wb-ink-3)',
+                  opacity: d.count > 0 ? 0.9 : 0.4,
                 }}
               />
             </div>

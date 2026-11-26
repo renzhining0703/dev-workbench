@@ -81,6 +81,27 @@ export function canAddTodo(r: Pick<Requirement, 'status'>): boolean {
 }
 
 /**
+ * 待办可关联的需求状态白名单：只保留「还在推进中」的需求。
+ * 过滤掉 已上线(published)/已完成(done)/已归档(archived)/待开发(pending)/未开始(notStarted)，
+ * 保留 开发中/测试中/待上线/暂停/进行中/待确认（经用户确认 2026-11-25，archived 为补充过滤项）。
+ */
+export const LINKABLE_STATUSES: readonly RequirementStatus[] = [
+  'developing',
+  'testing',
+  'ready',
+  'paused',
+  'inProgress',
+  'toConfirm',
+]
+
+/** 待办关联需求选择器的候选列表（active 过滤后传入，墓碑不计） */
+export function linkableRequirements(requirements: Requirement[]): Requirement[] {
+  return requirements
+    .filter((r) => !r.deletedAt && LINKABLE_STATUSES.includes(r.status))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+}
+
+/**
  * 某需求已关联的待办，按日期升序。
  * 入参应是 active() 过滤后的列表（墓碑不计入），调用方保证。
  */

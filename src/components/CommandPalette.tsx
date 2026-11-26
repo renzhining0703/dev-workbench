@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import type { Project, Requirement, TodoItem } from '../types'
 import { statusMeta } from '../types'
 
-export type PaletteTab = 'today' | 'todo' | 'list' | 'stats' | 'passwords'
+export type PaletteTab = 'today' | 'todo' | 'list' | 'stats' | 'timesheet' | 'passwords'
 
 interface PaletteItem {
   id: string
@@ -74,6 +74,7 @@ const NAV_LABELS: Record<PaletteTab, string> = {
   todo: '待办',
   list: '需求列表',
   stats: '统计',
+  timesheet: '工时',
   passwords: '密码管理',
 }
 
@@ -122,7 +123,7 @@ export function CommandPalette({
         run: onNewRequirement,
       },
       ...(
-        ['today', 'todo', 'list', 'stats', 'passwords'] as PaletteTab[]
+        ['today', 'todo', 'list', 'stats', 'timesheet', 'passwords'] as PaletteTab[]
       ).map((tab) => ({
         id: `act-nav-${tab}`,
         group: '操作',

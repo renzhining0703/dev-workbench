@@ -9,9 +9,11 @@ import { RequirementKanban } from './components/RequirementKanban'
 import { ProjectManagerModal } from './components/ProjectManagerModal'
 import { PublishReminder, TodoPanel } from './components/TodoPanel'
 import { TodoView } from './components/TodoView'
+import { TimesheetView } from './components/TimesheetView'
 import { PasswordView } from './components/PasswordView'
 import { TodayHero } from './components/TodayHero'
 import { TodoSummaryReminder } from './components/TodoSummaryReminder'
+import { TimesheetReminder } from './components/TimesheetReminder'
 import { Logo } from './components/Logo'
 import { ExportModal } from './components/ExportModal'
 import { ImportModal } from './components/ImportModal'
@@ -36,7 +38,7 @@ import { hasProjectInitFlag, markProjectInit } from './lib/storage'
 import { seedProjects } from './data/seedProjects'
 import { startSync, type SyncHandle } from './lib/sync'
 
-type Tab = 'today' | 'todo' | 'list' | 'stats' | 'passwords'
+type Tab = 'today' | 'todo' | 'list' | 'stats' | 'timesheet' | 'passwords'
 type ListView = 'table' | 'kanban'
 
 /** 首次启动自动导入历史数据的一次性标记（避免清空数据后又自动填回） */
@@ -529,6 +531,7 @@ function AppInner({
                 ['todo', '待办'],
                 ['list', '需求列表'],
                 ['stats', '统计'],
+                ['timesheet', '工时'],
               ] as [Tab, string][]
             ).map(([key, label]) => (
               <button
@@ -717,6 +720,7 @@ function AppInner({
               ['todo', '待办'],
               ['list', '需求列表'],
               ['stats', '统计'],
+              ['timesheet', '工时'],
             ] as [Tab, string][]
           ).map(([key, label]) => (
             <button
@@ -823,6 +827,10 @@ function AppInner({
               />
             )}
           </>
+        ) : tab === 'timesheet' ? (
+          <div className="wb-view active">
+            <TimesheetView todos={store.todos} requirements={store.requirements} />
+          </div>
         ) : tab === 'passwords' ? (
           <PasswordView />
         ) : (
@@ -861,6 +869,9 @@ function AppInner({
         todos={store.todos}
         onViewTodos={() => setTab('todo')}
       />
+
+      {/* 工时表月度提醒：每月最后一个工作日首次打开时触发 */}
+      <TimesheetReminder onViewTimesheet={() => setTab('timesheet')} />
 
       <RequirementFormModal
         open={formOpen}
