@@ -1,10 +1,14 @@
 /**
  * 工时月报纯函数库：从待办 + 需求推导每月工时底稿。
- * 口径（经用户确认 2026-11-25/26）：
+ * 口径（经用户确认 2026-11-25/26，2026-11-26 补充时点与上线口径）：
  *  - 一天默认 8h；每个工作日（排除周末/法定节假日，含调休上班日）都算工时
- *  - 当天有完成待办 → 按待办关联需求归属；未关联的先回退开发区间推导，
+ *  - 区间/智能推导只回算今天以前的日期：今天只按实际完成待办推导（无待办留空），
+ *    未来日不推导、不进空白漏记提醒；手动指定归属 / 休假标记不受时点限制
+ *  - 已上线需求不参与上线日之后的区间/智能推导（上线日当天及以前仍可归）；
+ *    当天所有候选需求均已上线时留空，进空白清单标红提醒补记
+ *  - 过去日期：当天有完成待办 → 按待办关联需求归属；未关联的先回退开发区间推导，
  *    区间也对不上时智能选一个最近需求归属（当天标 smart，UI 提示可手动改）
- *  - 当天无待办记录 → 落在某需求 devStartTime~devEndTime 开发区间内则归该需求，多需求平摊；
+ *  - 过去日期无待办记录 → 落在某需求 devStartTime~devEndTime 开发区间内则归该需求，多需求平摊；
  *    区间也没命中时同样智能选一个最近需求归属（标 smart），需求列表为空才留空标红提醒补记
  *  - 手动指定归属 / 休假 / 改时数走 overrides（仅 localStorage，不进同步协议）
  *  - 永不出现「杂项」：仅当连一个可选需求都没有时才兜底「未关联待办」
@@ -143,11 +147,24 @@ function pickSmartReq(
   return reqs.length > 0 ? reqs[0] : null
 }
 
+/** 需求最早上线日（yyyy-MM-dd，多项目分批上线取最早），未上线返回 null */
+function launchDateOf(r: Requirement): string | null {
+  const cands: string[] = []
+  const pub = isoToDateStr(r.publishTime)
+  if (pub) cands.push(pub)
+  for (const p of r.projects ?? []) {
+    const d = isoToDateStr(p.publishedAt ?? null)
+    if (d) cands.push(d)
+  }
+  return cands.length ? cands.sort()[0] : null
+}
+
 /**
  * 构建整月工时底稿：每天推导条目 + 汇总行 + 空白工作日清单。
  * 休全天覆盖全部自动条目；休半天把自动推导压缩到 4h，其余 4h 归休假。
  * overrides.attributions 指定归属后当天工时全归该需求（优先级最高）。
  * overrides.hours 仅在同名条目已存在时生效（改时数），不凭空造条目。
+ * today 缺省取本地当天；区间/智能推导只对今天以前的日期生效，已上线需求不参与上线后的推导。
  */
 export function buildMonthTimesheet(
   todos: TodoItem[],
@@ -155,7 +172,9 @@ export function buildMonthTimesheet(
   year: number,
   month: number,
   overrides: TimesheetOverrides = EMPTY_OVERRIDES,
+  today?: string,
 ): { days: TimesheetDay[]; rows: TimesheetRow[]; totalHours: number; emptyWorkdays: string[] } {
+  const todayStr = today ?? toDateStr(new Date())
   const reqMap = new Map(requirements.filter((r) => !r.deletedAt).map((r) => [r.id, r]))
   const reqList = [...reqMap.values()]
 
@@ -165,6 +184,14 @@ export function buildMonthTimesheet(
     const start = isoToDateStr(r.devStartTime)
     const end = isoToDateStr(r.devEndTime)
     if (start && end && start <= end) devRanges.push({ req: r, start, end })
+  }
+
+  // 需求最早上线日：上线日之后的日期不再把该需求当推导候选（上线当天及以前仍可归）
+  const launchById = new Map<string, string | null>()
+  for (const r of reqList) launchById.set(r.id, launchDateOf(r))
+  const isLaunchedBefore = (reqId: string, date: string): boolean => {
+    const ld = launchById.get(reqId)
+    return ld != null && ld < date
   }
 
   // 每天完成的待办：关联的按 label 归组；未关联的只记「这天有」，归属延后到区间/智能推导
@@ -214,17 +241,22 @@ export function buildMonthTimesheet(
         const targets = new Map<string, { label: string; reqId?: string; project?: string }>()
         for (const [k, v] of todosByDay.get(date) ?? []) targets.set(k, v)
         const fromTodos = todosByDay.get(date) != null || unlinkedDays.has(date)
-        // 区间回退：当天有未关联待办，或压根没有已关联待办覆盖时，用开发区间推导
-        if (unlinkedDays.has(date) || targets.size === 0) {
-          const hits = devRanges.filter((x) => x.start <= date && date <= x.end)
+        // 区间回退：只回算今天以前的日期（今天只认实际待办，未来日不推导），
+        // 且当天有未关联待办，或压根没有已关联待办覆盖时才走推导
+        if (date < todayStr && (unlinkedDays.has(date) || targets.size === 0)) {
+          // 上线日之后的已上线需求不参与候选
+          const hitable = devRanges.filter((x) => !isLaunchedBefore(x.req.id, date))
+          const hits = hitable.filter((x) => x.start <= date && date <= x.end)
           if (hits.length > 0) {
             for (const h of hits) {
               if (!targets.has(h.req.name))
                 targets.set(h.req.name, { label: h.req.name, reqId: h.req.id, project: h.req.projects?.[0]?.project })
             }
           } else {
-            // 区间对不上 → 智能选最近需求兜底（无待办日同样适用，标 smart，UI 提示可手动改）
-            const picked = pickSmartReq(devRanges, reqList, date)
+            // 区间对不上 → 智能选最近需求兜底（无待办日同样适用，标 smart，UI 提示可手动改）；
+            // 候选为空说明当天所有需求均已上线 → 留空进空白清单提醒补记，不硬猜
+            const activeReqs = reqList.filter((r) => !isLaunchedBefore(r.id, date))
+            const picked = pickSmartReq(hitable, activeReqs, date)
             if (picked) {
               if (!targets.has(picked.name))
                 targets.set(picked.name, { label: picked.name, reqId: picked.id, project: picked.projects?.[0]?.project })
@@ -273,8 +305,14 @@ export function buildMonthTimesheet(
   })
 
   const totalHours = Math.round(rows.reduce((s, r) => s + r.total, 0) * 10) / 10
+  // 空白漏记清单只统计今天以前的工作日：今天还没过完、未来日不提醒
   const emptyWorkdays = days
-    .filter((d) => (d.dayType === 'workday' || d.dayType === 'makeup') && d.entries.length === 0)
+    .filter(
+      (d) =>
+        (d.dayType === 'workday' || d.dayType === 'makeup') &&
+        d.entries.length === 0 &&
+        d.date < todayStr,
+    )
     .map((d) => d.date)
 
   return { days, rows, totalHours, emptyWorkdays }
